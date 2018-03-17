@@ -1,0 +1,40 @@
+language: rust
+
+matrix:
+  include:
+    - env: TARGET=x86_64-unknown-linux-gnu
+      rust: nightly
+    - env: TARGET=thumbv7m-none-eabi
+      rust: nightly
+
+before_install: set -e
+
+install:
+  - bash ci/install.sh
+
+script:
+  - bash ci/script.sh
+
+after_script: set +e
+
+after_success:
+  - bash ci/after_success.sh
+
+cache:
+  cargo: true
+  directories:
+    - $HOME/.xargo
+
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+branches:
+  only:
+    - master
+    - staging
+    - trying
+
+notifications:
+  email:
+    on_success: never
