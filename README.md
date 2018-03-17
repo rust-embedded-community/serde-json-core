@@ -4,7 +4,7 @@
 
 [`serde-json`]: https://crates.io/crates/serde_json
 
-## [Documentation](https://japaric.github.io/serde-json-core/serde_json_core)
+## [Documentation](https://japaric.github.io/serde-json-core/serde_json_core/)
 
 ## License
 
