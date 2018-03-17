@@ -1,0 +1,14 @@
+[package]
+authors = ["Jorge Aparicio <jorge@japaric.io>"]
+name = "serde-json-core"
+version = "0.1.0"
+
+[dependencies]
+heapless = "0.2.4"
+
+[dependencies.serde]
+default-features = false
+version = "1.0.33"
+
+[dev-dependencies]
+serde_derive = "1.0.33"
