@@ -5,7 +5,7 @@ main() {
         return
     fi
 
-    cargo doc --features doc
+    cargo doc
 
     mkdir ghp-import
 
