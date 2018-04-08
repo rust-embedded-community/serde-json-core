@@ -20,10 +20,7 @@ after_script: set +e
 after_success:
   - bash ci/after_success.sh
 
-cache:
-  cargo: true
-  directories:
-    - $HOME/.xargo
+cache: cargo
 
 before_cache:
   # Travis can't cache files that are not readable by "others"
