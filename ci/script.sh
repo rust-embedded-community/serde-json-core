@@ -5,6 +5,7 @@ main() {
 
     if [ $TARGET = x86_64-unknown-linux-gnu ]; then
         cargo test --target $TARGET
+        cargo check --target $TARGET --features std
         return
     fi
 }

@@ -50,8 +50,10 @@
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![feature(unsize)]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "std")]
+extern crate core;
 extern crate heapless;
 extern crate serde;
 #[cfg(test)]
