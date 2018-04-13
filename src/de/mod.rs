@@ -67,6 +67,13 @@ pub enum Error {
     __Extensible,
 }
 
+#[cfg(feature = "std")]
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        ""
+    }
+}
+
 pub(crate) struct Deserializer<'b> {
     slice: &'b [u8],
     index: usize,
@@ -185,7 +192,7 @@ impl<'a> Deserializer<'a> {
 // is what upstream does, to avoid pulling in 64-bit compiler intrinsics, which waste a few KBs of
 // Flash, when targeting non 64-bit architectures
 macro_rules! deserialize_unsigned {
-    ($self:ident, $visitor:ident, $uxx:ident, $visit_uxx:ident) => ({
+    ($self:ident, $visitor:ident, $uxx:ident, $visit_uxx:ident) => {{
         let peek = $self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
 
         match peek {
@@ -205,7 +212,7 @@ macro_rules! deserialize_unsigned {
                             number = number
                                 .checked_mul(10)
                                 .ok_or(Error::InvalidNumber)?
-                            .checked_add((c - b'0') as $uxx)
+                                .checked_add((c - b'0') as $uxx)
                                 .ok_or(Error::InvalidNumber)?;
                         }
                         _ => return $visitor.$visit_uxx(number),
@@ -214,11 +221,11 @@ macro_rules! deserialize_unsigned {
             }
             _ => Err(Error::InvalidType),
         }
-    })
+    }};
 }
 
 macro_rules! deserialize_signed {
-    ($self:ident, $visitor:ident, $ixx:ident, $visit_ixx:ident) => ({
+    ($self:ident, $visitor:ident, $ixx:ident, $visit_ixx:ident) => {{
         let signed = match $self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'-' => {
                 $self.eat_char();
@@ -252,7 +259,7 @@ macro_rules! deserialize_signed {
             }
             _ => return Err(Error::InvalidType),
         }
-    })
+    }};
 }
 
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {

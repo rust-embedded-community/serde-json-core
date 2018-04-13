@@ -10,8 +10,8 @@ use heapless::{BufferFullError, String, Vec};
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
 
-mod struct_;
 mod seq;
+mod struct_;
 
 /// Serialization result
 pub type Result<T> = ::core::result::Result<T, Error>;
@@ -23,6 +23,13 @@ pub enum Error {
     BufferFull,
     #[doc(hidden)]
     __Extensible,
+}
+
+#[cfg(feature = "std")]
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        ""
+    }
 }
 
 impl From<BufferFullError> for Error {
@@ -56,17 +63,17 @@ where
 // NOTE(serialize_*signed) This is basically the numtoa implementation minus the lookup tables,
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
-    ($self:ident, $N:expr, $v:expr) => ({
+    ($self:ident, $N:expr, $v:expr) => {{
         let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
 
         let mut v = $v;
         let mut i = $N - 1;
-        loop  {
+        loop {
             buf[i] = (v % 10) as u8 + b'0';
             v /= 10;
 
             if v == 0 {
-                break
+                break;
             } else {
                 i -= 1;
             }
@@ -74,11 +81,11 @@ macro_rules! serialize_unsigned {
 
         $self.buf.extend_from_slice(&buf[i..])?;
         Ok(())
-    })
+    }};
 }
 
 macro_rules! serialize_signed {
-    ($self:ident, $N:expr, $v:expr, $ixx:ident, $uxx:ident) => ({
+    ($self:ident, $N:expr, $v:expr, $ixx:ident, $uxx:ident) => {{
         let v = $v;
         let (signed, mut v) = if v == $ixx::min_value() {
             (true, $ixx::max_value() as $uxx + 1)
@@ -108,7 +115,7 @@ macro_rules! serialize_signed {
         }
         $self.buf.extend_from_slice(&buf[i..])?;
         Ok(())
-    })
+    }};
 }
 
 impl<'a, B> ser::Serializer for &'a mut Serializer<B>
