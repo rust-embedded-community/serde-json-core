@@ -1,11 +1,10 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::marker::Unsize;
 use core::{fmt, mem};
 
 use serde::ser;
 
-use heapless::{BufferFullError, String, Vec};
+use heapless::{String, Vec};
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -25,6 +24,19 @@ pub enum Error {
     __Extensible,
 }
 
+impl From<()> for Error {
+    fn from(_:()) -> Error {
+        Error::BufferFull
+    }
+}
+
+
+impl From<u8> for Error {
+    fn from(_:u8) -> Error {
+        Error::BufferFull
+    }
+}
+
 #[cfg(feature = "std")]
 impl ::std::error::Error for Error {
     fn description(&self) -> &str {
@@ -32,11 +44,6 @@ impl ::std::error::Error for Error {
     }
 }
 
-impl From<BufferFullError> for Error {
-    fn from(_: BufferFullError) -> Self {
-        Error::BufferFull
-    }
-}
 
 impl fmt::Display for Error {
     fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
@@ -46,14 +53,14 @@ impl fmt::Display for Error {
 
 pub(crate) struct Serializer<B>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
 {
     buf: Vec<u8, B>,
 }
 
 impl<B> Serializer<B>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
 {
     fn new() -> Self {
         Serializer { buf: Vec::new() }
@@ -120,7 +127,7 @@ macro_rules! serialize_signed {
 
 impl<'a, B> ser::Serializer for &'a mut Serializer<B>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
 {
     type Ok = ();
     type Error = Error;
@@ -317,7 +324,7 @@ where
 /// Serializes the given data structure as a string of JSON text
 pub fn to_string<B, T>(value: &T) -> Result<String<B>>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
     let mut ser = Serializer::new();
@@ -328,7 +335,7 @@ where
 /// Serializes the given data structure as a JSON byte vector
 pub fn to_vec<B, T>(value: &T) -> Result<Vec<u8, B>>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
     let mut ser = Serializer::new();
@@ -414,19 +421,20 @@ impl ser::SerializeStructVariant for Unreachable {
 
 #[cfg(test)]
 mod tests {
-    const N: usize = 128;
+    use heapless::consts::U128;
+    type N = U128;
 
     #[test]
     fn array() {
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&[0, 1, 2]).unwrap(),
+            &*super::to_string::<N,_>(&[0, 1, 2]).unwrap(),
             "[0,1,2]"
         );
     }
 
     #[test]
     fn bool() {
-        assert_eq!(&*super::to_string::<[u8; N], _>(&true).unwrap(), "true");
+        assert_eq!(&*super::to_string::<N, _>(&true).unwrap(), "true");
     }
 
     #[test]
@@ -440,12 +448,12 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Type::Boolean).unwrap(),
+            &*super::to_string::<N, _>(&Type::Boolean).unwrap(),
             r#""boolean""#
         );
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Type::Number).unwrap(),
+            &*super::to_string::<N, _>(&Type::Number).unwrap(),
             r#""number""#
         );
     }
@@ -453,7 +461,7 @@ mod tests {
     #[test]
     fn str() {
         assert_eq!(
-            &*super::to_string::<[u8; N], _>("hello").unwrap(),
+            &*super::to_string::<N, _>("hello").unwrap(),
             r#""hello""#
         );
     }
@@ -466,7 +474,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Led { led: true }).unwrap(),
+            &*super::to_string::<N, _>(&Led { led: true }).unwrap(),
             r#"{"led":true}"#
         );
     }
@@ -479,22 +487,22 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Temperature { temperature: 127 }).unwrap(),
+            &*super::to_string::<N, _>(&Temperature { temperature: 127 }).unwrap(),
             r#"{"temperature":127}"#
         );
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Temperature { temperature: 20 }).unwrap(),
+            &*super::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Temperature { temperature: -17 }).unwrap(),
+            &*super::to_string::<N, _>(&Temperature { temperature: -17 }).unwrap(),
             r#"{"temperature":-17}"#
         );
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Temperature { temperature: -128 }).unwrap(),
+            &*super::to_string::<N, _>(&Temperature { temperature: -128 }).unwrap(),
             r#"{"temperature":-128}"#
         );
     }
@@ -507,7 +515,7 @@ mod tests {
         }
 
         assert_eq!(
-            super::to_string::<[u8; N], _>(&Property {
+            super::to_string::<N, _>(&Property {
                 description: Some("An ambient temperature sensor"),
             }).unwrap(),
             r#"{"description":"An ambient temperature sensor"}"#
@@ -515,7 +523,7 @@ mod tests {
 
         // XXX Ideally this should produce "{}"
         assert_eq!(
-            super::to_string::<[u8; N], _>(&Property { description: None }).unwrap(),
+            super::to_string::<N, _>(&Property { description: None }).unwrap(),
             r#"{"description":null}"#
         );
     }
@@ -528,7 +536,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Temperature { temperature: 20 }).unwrap(),
+            &*super::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
     }
@@ -539,7 +547,7 @@ mod tests {
         struct Empty {}
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Empty {}).unwrap(),
+            &*super::to_string::<N, _>(&Empty {}).unwrap(),
             r#"{}"#
         );
 
@@ -550,7 +558,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Tuple { a: true, b: false }).unwrap(),
+            &*super::to_string::<N, _>(&Tuple { a: true, b: false }).unwrap(),
             r#"{"a":true,"b":false}"#
         );
     }

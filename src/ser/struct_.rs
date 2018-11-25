@@ -1,12 +1,10 @@
-use core::marker::Unsize;
-
 use serde::ser;
 
 use ser::{Error, Result, Serializer};
 
 pub struct SerializeStruct<'a, B>
 where
-    B: Unsize<[u8]> + 'a,
+    B: heapless::ArrayLength<u8> + 'a,
 {
     de: &'a mut Serializer<B>,
     first: bool,
@@ -14,7 +12,7 @@ where
 
 impl<'a, B> SerializeStruct<'a, B>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
 {
     pub(crate) fn new(de: &'a mut Serializer<B>) -> Self {
         SerializeStruct { de, first: true }
@@ -23,7 +21,7 @@ where
 
 impl<'a, B> ser::SerializeStruct for SerializeStruct<'a, B>
 where
-    B: Unsize<[u8]>,
+    B: heapless::ArrayLength<u8>,
 {
     type Ok = ();
     type Error = Error;

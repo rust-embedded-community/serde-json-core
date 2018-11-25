@@ -4,7 +4,7 @@ name = "serde-json-core"
 version = "0.1.0"
 
 [dependencies]
-heapless = "0.2.4"
+heapless = "0.4.0"
 
 [dependencies.serde]
 default-features = false
