@@ -46,8 +46,8 @@ impl ::std::error::Error for Error {
 
 
 impl fmt::Display for Error {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        unreachable!()
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Buffer is full")
     }
 }
 
