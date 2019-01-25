@@ -62,3 +62,8 @@ extern crate serde_derive;
 
 pub mod de;
 pub mod ser;
+
+#[doc(inline)]
+pub use self::de::{from_slice, from_str};
+#[doc(inline)]
+pub use self::ser::{to_string, to_vec};
