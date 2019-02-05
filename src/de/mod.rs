@@ -548,8 +548,32 @@ impl de::Error for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        unreachable!()
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match self {
+            Error::EofWhileParsingList => "EOF while parsing a list.",
+            Error::EofWhileParsingObject => "EOF while parsing an object.",
+            Error::EofWhileParsingString => "EOF while parsing a string.",
+            Error::EofWhileParsingValue => "EOF while parsing a JSON value.",
+            Error::ExpectedColon => "Expected this character to be a `':'`.",
+            Error::ExpectedListCommaOrEnd => "Expected this character to be either a `','` or\
+             a \
+            `']'`.",
+            Error::ExpectedObjectCommaOrEnd => "Expected this character to be either a `','` \
+            or a \
+            `'}'`.",
+            Error::ExpectedSomeIdent => "Expected to parse either a `true`, `false`, or a \
+            `null`.",
+            Error::ExpectedSomeValue => "Expected this character to start a JSON value.",
+            Error::InvalidNumber => "Invalid number.",
+            Error::InvalidType => "Invalid type",
+            Error::InvalidUnicodeCodePoint => "Invalid unicode code point.",
+            Error::KeyMustBeAString => "Object key is not a string.",
+            Error::TrailingCharacters => "JSON has non-whitespace trailing characters after \
+            the \
+            value.",
+            Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
+            _ => "Invalid JSON"
+        })
     }
 }
 
