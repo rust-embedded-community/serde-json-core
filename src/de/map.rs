@@ -1,6 +1,6 @@
 use serde::de::{self, Visitor};
 
-use de::{Deserializer, Error};
+use crate::de::{Deserializer, Error};
 
 pub struct MapAccess<'a, 'b>
 where
@@ -23,7 +23,8 @@ impl<'a, 'de> de::MapAccess<'de> for MapAccess<'a, 'de> {
     where
         K: de::DeserializeSeed<'de>,
     {
-        let peek = match self.de
+        let peek = match self
+            .de
             .parse_whitespace()
             .ok_or(Error::EofWhileParsingObject)?
         {

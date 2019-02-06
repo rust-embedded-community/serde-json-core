@@ -25,14 +25,13 @@ pub enum Error {
 }
 
 impl From<()> for Error {
-    fn from(_:()) -> Error {
+    fn from(_: ()) -> Error {
         Error::BufferFull
     }
 }
 
-
 impl From<u8> for Error {
-    fn from(_:u8) -> Error {
+    fn from(_: u8) -> Error {
         Error::BufferFull
     }
 }
@@ -44,9 +43,8 @@ impl ::std::error::Error for Error {
     }
 }
 
-
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Buffer is full")
     }
 }
@@ -421,20 +419,20 @@ impl ser::SerializeStructVariant for Unreachable {
 
 #[cfg(test)]
 mod tests {
+    use serde_derive::Serialize;
+
     use heapless::consts::U128;
+
     type N = U128;
 
     #[test]
     fn array() {
-        assert_eq!(
-            &*super::to_string::<N,_>(&[0, 1, 2]).unwrap(),
-            "[0,1,2]"
-        );
+        assert_eq!(&*crate::to_string::<N, _>(&[0, 1, 2]).unwrap(), "[0,1,2]");
     }
 
     #[test]
     fn bool() {
-        assert_eq!(&*super::to_string::<N, _>(&true).unwrap(), "true");
+        assert_eq!(&*crate::to_string::<N, _>(&true).unwrap(), "true");
     }
 
     #[test]
@@ -448,22 +446,19 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Type::Boolean).unwrap(),
+            &*crate::to_string::<N, _>(&Type::Boolean).unwrap(),
             r#""boolean""#
         );
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Type::Number).unwrap(),
+            &*crate::to_string::<N, _>(&Type::Number).unwrap(),
             r#""number""#
         );
     }
 
     #[test]
     fn str() {
-        assert_eq!(
-            &*super::to_string::<N, _>("hello").unwrap(),
-            r#""hello""#
-        );
+        assert_eq!(&*crate::to_string::<N, _>("hello").unwrap(), r#""hello""#);
     }
 
     #[test]
@@ -474,7 +469,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Led { led: true }).unwrap(),
+            &*crate::to_string::<N, _>(&Led { led: true }).unwrap(),
             r#"{"led":true}"#
         );
     }
@@ -487,22 +482,22 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Temperature { temperature: 127 }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature { temperature: 127 }).unwrap(),
             r#"{"temperature":127}"#
         );
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Temperature { temperature: -17 }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature { temperature: -17 }).unwrap(),
             r#"{"temperature":-17}"#
         );
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Temperature { temperature: -128 }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature { temperature: -128 }).unwrap(),
             r#"{"temperature":-128}"#
         );
     }
@@ -515,15 +510,16 @@ mod tests {
         }
 
         assert_eq!(
-            super::to_string::<N, _>(&Property {
+            crate::to_string::<N, _>(&Property {
                 description: Some("An ambient temperature sensor"),
-            }).unwrap(),
+            })
+            .unwrap(),
             r#"{"description":"An ambient temperature sensor"}"#
         );
 
         // XXX Ideally this should produce "{}"
         assert_eq!(
-            super::to_string::<N, _>(&Property { description: None }).unwrap(),
+            crate::to_string::<N, _>(&Property { description: None }).unwrap(),
             r#"{"description":null}"#
         );
     }
@@ -536,7 +532,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
     }
@@ -546,10 +542,7 @@ mod tests {
         #[derive(Serialize)]
         struct Empty {}
 
-        assert_eq!(
-            &*super::to_string::<N, _>(&Empty {}).unwrap(),
-            r#"{}"#
-        );
+        assert_eq!(&*crate::to_string::<N, _>(&Empty {}).unwrap(), r#"{}"#);
 
         #[derive(Serialize)]
         struct Tuple {
@@ -558,7 +551,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<N, _>(&Tuple { a: true, b: false }).unwrap(),
+            &*crate::to_string::<N, _>(&Tuple { a: true, b: false }).unwrap(),
             r#"{"a":true,"b":false}"#
         );
     }

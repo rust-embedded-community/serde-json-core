@@ -1,6 +1,6 @@
 use serde::de;
 
-use de::{Deserializer, Error, Result};
+use crate::de::{Deserializer, Error, Result};
 
 pub(crate) struct SeqAccess<'a, 'b>
 where
@@ -23,7 +23,8 @@ impl<'a, 'de> de::SeqAccess<'de> for SeqAccess<'a, 'de> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        let peek = match self.de
+        let peek = match self
+            .de
             .parse_whitespace()
             .ok_or(Error::EofWhileParsingList)?
         {

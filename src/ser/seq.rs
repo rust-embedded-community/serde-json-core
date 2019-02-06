@@ -1,10 +1,12 @@
 use serde::ser;
 
-use ser::{Error, Result, Serializer};
+use heapless::ArrayLength;
+
+use crate::ser::{Error, Result, Serializer};
 
 pub struct SerializeSeq<'a, B>
 where
-    B: heapless::ArrayLength<u8> + 'a,
+    B: ArrayLength<u8>,
 {
     de: &'a mut Serializer<B>,
     first: bool,
@@ -12,7 +14,7 @@ where
 
 impl<'a, B> SerializeSeq<'a, B>
 where
-    B: heapless::ArrayLength<u8>,
+    B: ArrayLength<u8>,
 {
     pub(crate) fn new(de: &'a mut Serializer<B>) -> Self {
         SerializeSeq { de, first: true }
@@ -21,7 +23,7 @@ where
 
 impl<'a, B> ser::SerializeSeq for SerializeSeq<'a, B>
 where
-    B: heapless::ArrayLength<u8>,
+    B: ArrayLength<u8>,
 {
     type Ok = ();
     type Error = Error;
@@ -47,7 +49,7 @@ where
 
 impl<'a, B> ser::SerializeTuple for SerializeSeq<'a, B>
 where
-    B: heapless::ArrayLength<u8>,
+    B: ArrayLength<u8>,
 {
     type Ok = ();
     type Error = Error;
