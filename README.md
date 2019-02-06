@@ -4,12 +4,7 @@
 
 [`serde-json`]: https://crates.io/crates/serde_json
 
-```toml
-[dependencies]
-serde-json-core = "0.0.1"
-```
-
-## [Documentation](https://japaric.github.io/serde-json-core/serde_json_core/)
+## [Documentation](https://docs.rs/serde-json-core)
 
 ## License
 

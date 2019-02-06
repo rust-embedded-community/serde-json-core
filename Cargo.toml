@@ -1,7 +1,14 @@
 [package]
 authors = ["Jorge Aparicio <jorge@japaric.io>"]
+categories = ["no-std"]
+description = "serde-json for no_std programs"
+documentation = "https://docs.rs/serde-json-core"
 edition = "2018"
+keywords = ["serde", "json"]
+license = "MIT OR Apache-2.0"
 name = "serde-json-core"
+readme = "README.md"
+repository = "https://github.com/japaric/serde-json-core"
 version = "0.1.0"
 
 [dependencies]
