@@ -1,5 +1,6 @@
 use serde::de;
-use de::{Deserializer, Error, Result};
+
+use crate::de::{Deserializer, Error, Result};
 
 pub(crate) struct UnitVariantAccess<'a, 'b>
 where

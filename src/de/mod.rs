@@ -13,7 +13,7 @@ mod map;
 mod seq;
 
 /// Deserialization result
-pub type Result<T> = ::core::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 /// This type represents all possible errors that can occur when deserializing JSON data
 #[derive(Debug, PartialEq)]
@@ -80,7 +80,7 @@ pub(crate) struct Deserializer<'b> {
 }
 
 impl<'a> Deserializer<'a> {
-    fn new(slice: &'a [u8]) -> Deserializer {
+    fn new(slice: &'a [u8]) -> Deserializer<'_> {
         Deserializer { slice, index: 0 }
     }
 
@@ -113,7 +113,10 @@ impl<'a> Deserializer<'a> {
     }
 
     fn end_map(&mut self) -> Result<()> {
-        match self.parse_whitespace().ok_or(Error::EofWhileParsingObject)? {
+        match self
+            .parse_whitespace()
+            .ok_or(Error::EofWhileParsingObject)?
+        {
             b'}' => {
                 self.eat_char();
                 Ok(())
@@ -144,7 +147,10 @@ impl<'a> Deserializer<'a> {
     }
 
     fn parse_object_colon(&mut self) -> Result<()> {
-        match self.parse_whitespace().ok_or(Error::EofWhileParsingObject)? {
+        match self
+            .parse_whitespace()
+            .ok_or(Error::EofWhileParsingObject)?
+        {
             b':' => {
                 self.eat_char();
                 Ok(())
@@ -193,7 +199,9 @@ impl<'a> Deserializer<'a> {
 // Flash, when targeting non 64-bit architectures
 macro_rules! deserialize_unsigned {
     ($self:ident, $visitor:ident, $uxx:ident, $visit_uxx:ident) => {{
-        let peek = $self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        let peek = $self
+            .parse_whitespace()
+            .ok_or(Error::EofWhileParsingValue)?;
 
         match peek {
             b'-' => Err(Error::InvalidNumber),
@@ -201,13 +209,13 @@ macro_rules! deserialize_unsigned {
                 $self.eat_char();
                 $visitor.$visit_uxx(0)
             }
-            b'1'...b'9' => {
+            b'1'..=b'9' => {
                 $self.eat_char();
 
                 let mut number = (peek - b'0') as $uxx;
                 loop {
                     match $self.peek() {
-                        Some(c @ b'0'...b'9') => {
+                        Some(c @ b'0'..=b'9') => {
                             $self.eat_char();
                             number = number
                                 .checked_mul(10)
@@ -226,7 +234,10 @@ macro_rules! deserialize_unsigned {
 
 macro_rules! deserialize_signed {
     ($self:ident, $visitor:ident, $ixx:ident, $visit_ixx:ident) => {{
-        let signed = match $self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+        let signed = match $self
+            .parse_whitespace()
+            .ok_or(Error::EofWhileParsingValue)?
+        {
             b'-' => {
                 $self.eat_char();
                 true
@@ -239,13 +250,13 @@ macro_rules! deserialize_signed {
                 $self.eat_char();
                 $visitor.$visit_ixx(0)
             }
-            c @ b'1'...b'9' => {
+            c @ b'1'..=b'9' => {
                 $self.eat_char();
 
                 let mut number = (c - b'0') as $ixx * if signed { -1 } else { 1 };
                 loop {
                     match $self.peek() {
-                        Some(c @ b'0'...b'9') => {
+                        Some(c @ b'0'..=b'9') => {
                             $self.eat_char();
                             number = number
                                 .checked_mul(10)
@@ -548,32 +559,44 @@ impl de::Error for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            Error::EofWhileParsingList => "EOF while parsing a list.",
-            Error::EofWhileParsingObject => "EOF while parsing an object.",
-            Error::EofWhileParsingString => "EOF while parsing a string.",
-            Error::EofWhileParsingValue => "EOF while parsing a JSON value.",
-            Error::ExpectedColon => "Expected this character to be a `':'`.",
-            Error::ExpectedListCommaOrEnd => "Expected this character to be either a `','` or\
-             a \
-            `']'`.",
-            Error::ExpectedObjectCommaOrEnd => "Expected this character to be either a `','` \
-            or a \
-            `'}'`.",
-            Error::ExpectedSomeIdent => "Expected to parse either a `true`, `false`, or a \
-            `null`.",
-            Error::ExpectedSomeValue => "Expected this character to start a JSON value.",
-            Error::InvalidNumber => "Invalid number.",
-            Error::InvalidType => "Invalid type",
-            Error::InvalidUnicodeCodePoint => "Invalid unicode code point.",
-            Error::KeyMustBeAString => "Object key is not a string.",
-            Error::TrailingCharacters => "JSON has non-whitespace trailing characters after \
-            the \
-            value.",
-            Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
-            _ => "Invalid JSON"
-        })
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Error::EofWhileParsingList => "EOF while parsing a list.",
+                Error::EofWhileParsingObject => "EOF while parsing an object.",
+                Error::EofWhileParsingString => "EOF while parsing a string.",
+                Error::EofWhileParsingValue => "EOF while parsing a JSON value.",
+                Error::ExpectedColon => "Expected this character to be a `':'`.",
+                Error::ExpectedListCommaOrEnd => {
+                    "Expected this character to be either a `','` or\
+                     a \
+                     `']'`."
+                }
+                Error::ExpectedObjectCommaOrEnd => {
+                    "Expected this character to be either a `','` \
+                     or a \
+                     `'}'`."
+                }
+                Error::ExpectedSomeIdent => {
+                    "Expected to parse either a `true`, `false`, or a \
+                     `null`."
+                }
+                Error::ExpectedSomeValue => "Expected this character to start a JSON value.",
+                Error::InvalidNumber => "Invalid number.",
+                Error::InvalidType => "Invalid type",
+                Error::InvalidUnicodeCodePoint => "Invalid unicode code point.",
+                Error::KeyMustBeAString => "Object key is not a string.",
+                Error::TrailingCharacters => {
+                    "JSON has non-whitespace trailing characters after \
+                     the \
+                     value."
+                }
+                Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
+                _ => "Invalid JSON",
+            }
+        )
     }
 }
 
@@ -599,6 +622,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serde_derive::Deserialize;
+
     #[derive(Debug, Deserialize, PartialEq)]
     enum Type {
         #[serde(rename = "boolean")]
@@ -611,38 +636,38 @@ mod tests {
 
     #[test]
     fn array() {
-        assert_eq!(super::from_str::<[i32; 0]>("[]"), Ok([]));
-        assert_eq!(super::from_str("[0, 1, 2]"), Ok([0, 1, 2]));
+        assert_eq!(crate::from_str::<[i32; 0]>("[]"), Ok([]));
+        assert_eq!(crate::from_str("[0, 1, 2]"), Ok([0, 1, 2]));
 
         // errors
-        assert!(super::from_str::<[i32; 2]>("[0, 1,]").is_err());
+        assert!(crate::from_str::<[i32; 2]>("[0, 1,]").is_err());
     }
 
     #[test]
     fn bool() {
-        assert_eq!(super::from_str("true"), Ok(true));
-        assert_eq!(super::from_str(" true"), Ok(true));
-        assert_eq!(super::from_str("true "), Ok(true));
+        assert_eq!(crate::from_str("true"), Ok(true));
+        assert_eq!(crate::from_str(" true"), Ok(true));
+        assert_eq!(crate::from_str("true "), Ok(true));
 
-        assert_eq!(super::from_str("false"), Ok(false));
-        assert_eq!(super::from_str(" false"), Ok(false));
-        assert_eq!(super::from_str("false "), Ok(false));
+        assert_eq!(crate::from_str("false"), Ok(false));
+        assert_eq!(crate::from_str(" false"), Ok(false));
+        assert_eq!(crate::from_str("false "), Ok(false));
 
         // errors
-        assert!(super::from_str::<bool>("true false").is_err());
-        assert!(super::from_str::<bool>("tru").is_err());
+        assert!(crate::from_str::<bool>("true false").is_err());
+        assert!(crate::from_str::<bool>("tru").is_err());
     }
 
     #[test]
     fn enum_clike() {
-        assert_eq!(super::from_str(r#" "boolean" "#), Ok(Type::Boolean));
-        assert_eq!(super::from_str(r#" "number" "#), Ok(Type::Number));
-        assert_eq!(super::from_str(r#" "thing" "#), Ok(Type::Thing));
+        assert_eq!(crate::from_str(r#" "boolean" "#), Ok(Type::Boolean));
+        assert_eq!(crate::from_str(r#" "number" "#), Ok(Type::Number));
+        assert_eq!(crate::from_str(r#" "thing" "#), Ok(Type::Thing));
     }
 
     #[test]
     fn str() {
-        assert_eq!(super::from_str(r#" "hello" "#), Ok("hello"));
+        assert_eq!(crate::from_str(r#" "hello" "#), Ok("hello"));
     }
 
     #[test]
@@ -652,9 +677,9 @@ mod tests {
             led: bool,
         }
 
-        assert_eq!(super::from_str(r#"{ "led": true }"#), Ok(Led { led: true }));
+        assert_eq!(crate::from_str(r#"{ "led": true }"#), Ok(Led { led: true }));
         assert_eq!(
-            super::from_str(r#"{ "led": false }"#),
+            crate::from_str(r#"{ "led": false }"#),
             Ok(Led { led: false })
         );
     }
@@ -667,23 +692,23 @@ mod tests {
         }
 
         assert_eq!(
-            super::from_str(r#"{ "temperature": -17 }"#),
+            crate::from_str(r#"{ "temperature": -17 }"#),
             Ok(Temperature { temperature: -17 })
         );
 
         assert_eq!(
-            super::from_str(r#"{ "temperature": -0 }"#),
+            crate::from_str(r#"{ "temperature": -0 }"#),
             Ok(Temperature { temperature: -0 })
         );
 
         assert_eq!(
-            super::from_str(r#"{ "temperature": 0 }"#),
+            crate::from_str(r#"{ "temperature": 0 }"#),
             Ok(Temperature { temperature: 0 })
         );
 
         // out of range
-        assert!(super::from_str::<Temperature>(r#"{ "temperature": 128 }"#).is_err());
-        assert!(super::from_str::<Temperature>(r#"{ "temperature": -129 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 128 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": -129 }"#).is_err());
     }
 
     #[test]
@@ -695,18 +720,18 @@ mod tests {
         }
 
         assert_eq!(
-            super::from_str(r#"{ "description": "An ambient temperature sensor" }"#),
+            crate::from_str(r#"{ "description": "An ambient temperature sensor" }"#),
             Ok(Property {
                 description: Some("An ambient temperature sensor"),
             })
         );
 
         assert_eq!(
-            super::from_str(r#"{ "description": null }"#),
+            crate::from_str(r#"{ "description": null }"#),
             Ok(Property { description: None })
         );
 
-        assert_eq!(super::from_str(r#"{}"#), Ok(Property { description: None }));
+        assert_eq!(crate::from_str(r#"{}"#), Ok(Property { description: None }));
     }
 
     #[test]
@@ -717,18 +742,18 @@ mod tests {
         }
 
         assert_eq!(
-            super::from_str(r#"{ "temperature": 20 }"#),
+            crate::from_str(r#"{ "temperature": 20 }"#),
             Ok(Temperature { temperature: 20 })
         );
 
         assert_eq!(
-            super::from_str(r#"{ "temperature": 0 }"#),
+            crate::from_str(r#"{ "temperature": 0 }"#),
             Ok(Temperature { temperature: 0 })
         );
 
         // out of range
-        assert!(super::from_str::<Temperature>(r#"{ "temperature": 256 }"#).is_err());
-        assert!(super::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 256 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
     }
 
     // See https://iot.mozilla.org/wot/#thing-resource
@@ -764,7 +789,7 @@ mod tests {
         }
 
         assert_eq!(
-            super::from_str::<Thing>(
+            crate::from_str::<Thing<'_>>(
                 r#"
 {
   "type": "thing",

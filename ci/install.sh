@@ -1,8 +1,10 @@
 set -euxo pipefail
 
 main() {
-    if [ $TARGET = thumbv7m-none-eabi ]; then
+    if [ $TARGET != rustfmt ]; then
         rustup target add $TARGET
+    else
+        rustup component add rustfmt
     fi
 }
 

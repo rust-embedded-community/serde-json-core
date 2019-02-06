@@ -47,18 +47,17 @@
 //! - Anything that involves dynamic memory allocation
 //!   - Like the dynamic [`Value`](https://docs.rs/serde_json/1.0.11/serde_json/enum.Value.html)
 //!     type
-#![deny(missing_docs)]
-#![deny(warnings)]
-#![feature(unsize)]
-#![cfg_attr(not(feature = "std"), no_std)]
+//!
+//! # MSRV
+//!
+//! This crate is guaranteed to compile on stable Rust 1.31.0 and up. It *might* compile with older
+//! versions but that may change in any new patch release.
 
-#[cfg(feature = "std")]
-extern crate core;
-extern crate heapless;
-extern crate serde;
-#[cfg(test)]
-#[macro_use]
-extern crate serde_derive;
+#![deny(missing_docs)]
+#![deny(rust_2018_compatibility)]
+#![deny(rust_2018_idioms)]
+#![deny(warnings)]
+#![no_std]
 
 pub mod de;
 pub mod ser;
