@@ -8,7 +8,7 @@ keywords = ["serde", "json"]
 license = "MIT OR Apache-2.0"
 name = "serde-json-core"
 readme = "README.md"
-repository = "https://github.com/japaric/serde-json-core"
+repository = "https://japaric.github.io/serde-json-core/serde_json_core"
 version = "0.0.1"
 
 [dependencies]
