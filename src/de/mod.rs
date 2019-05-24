@@ -4,6 +4,8 @@ use core::{fmt, str};
 
 use serde::de::{self, Visitor};
 
+use lexical_core::{try_atof32_lossy_slice, ErrorCode};
+
 use self::enum_::UnitVariantAccess;
 use self::map::MapAccess;
 use self::seq::SeqAccess;
@@ -26,6 +28,9 @@ pub enum Error {
 
     /// EOF while parsing a string.
     EofWhileParsingString,
+
+    /// EOF while parsing a JSON number.
+    EofWhileParsingNumber,
 
     /// EOF while parsing a JSON value.
     EofWhileParsingValue,
@@ -360,11 +365,20 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         deserialize_unsigned!(self, visitor, u64, visit_u64)
     }
 
-    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        let r = try_atof32_lossy_slice(&self.slice[self.index..]);
+        match r.error.code {
+            ErrorCode::Success | ErrorCode::InvalidDigit => {
+                self.index += r.error.index;
+                visitor.visit_f32(r.value)
+            },
+            ErrorCode::Empty => Err(Error::EofWhileParsingNumber),
+            _ => Err(Error::InvalidNumber)
+        }
     }
 
     fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
@@ -709,6 +723,46 @@ mod tests {
         // out of range
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 128 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -129 }"#).is_err());
+    }
+
+    #[test]
+    fn struct_f32() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Temperature {
+            temperature: f32,
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -17.2 }"#),
+            Ok(Temperature { temperature: -17.2 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -0.0 }"#),
+            Ok(Temperature { temperature: -0. })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -2.1e-3 }"#),
+            Ok(Temperature { temperature: -2.1e-3 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -3 }"#),
+            Ok(Temperature { temperature: -3. })
+        );
+
+        use core::f32;
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -1e500 }"#),
+            Ok(Temperature { temperature: f32::NEG_INFINITY })
+        );
+
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": -2-2 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1 1 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 0.0. }"#).is_err());
     }
 
     #[test]
