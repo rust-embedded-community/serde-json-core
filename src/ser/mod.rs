@@ -6,6 +6,8 @@ use serde::ser;
 
 use heapless::{String, Vec};
 
+use lexical_core::{f32toa_slice, MAX_F32_SIZE};
+
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
 
@@ -187,8 +189,10 @@ where
         serialize_unsigned!(self, 20, v)
     }
 
-    fn serialize_f32(self, _v: f32) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
+        let mut s: [u8; MAX_F32_SIZE] = [0; MAX_F32_SIZE];
+        self.buf.extend_from_slice(f32toa_slice(v, &mut s))?;
+        Ok(())
     }
 
     fn serialize_f64(self, _v: f64) -> Result<Self::Ok> {
@@ -501,6 +505,20 @@ mod tests {
             r#"{"temperature":-128}"#
         );
     }
+
+    #[test]
+    fn struct_f32() {
+        #[derive(Serialize)]
+        struct Temperature {
+            temperature: f32,
+        }
+
+        assert_eq!(
+            &*crate::to_string::<N, _>(&Temperature { temperature: -20. }).unwrap(),
+            r#"{"temperature":-20.0}"#
+        );
+    }
+
 
     #[test]
     fn struct_option() {
