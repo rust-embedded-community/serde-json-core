@@ -189,7 +189,7 @@ where
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
         let mut s: String<heapless::consts::U32> = String::new();
-        write!(&mut s, "{}", v).unwrap();
+        write!(&mut s, "{:e}", v).unwrap();
         self.buf.extend_from_slice(s.as_bytes())?;
         Ok(())
     }
@@ -514,7 +514,17 @@ mod tests {
 
         assert_eq!(
             &*crate::to_string::<N, _>(&Temperature { temperature: -20. }).unwrap(),
-            r#"{"temperature":-20}"#
+            r#"{"temperature":-2e1}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<N, _>(&Temperature { temperature: -20.345 }).unwrap(),
+            r#"{"temperature":-2.0345e1}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<N, _>(&Temperature { temperature: -20.3456789e-30 }).unwrap(),
+            r#"{"temperature":-2.0345679e-29}"#
         );
     }
 
