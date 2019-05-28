@@ -286,7 +286,9 @@ macro_rules! deserialize_fromstr {
                     if $pattern.iter().find(|&&d| d == c).is_some() {
                         $self.eat_char();
                     } else {
-                        let s = str::from_utf8(&$self.slice[start..$self.index]).unwrap();
+                        let s = unsafe {  // already checked that it contains only ascii
+                            str::from_utf8_unchecked(&$self.slice[start..$self.index])
+                        };
                         let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
                         return $visitor.$visit_fn(v);
                     }
@@ -775,6 +777,7 @@ mod tests {
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -2-2 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1 1 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 0.0. }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": ä }"#).is_err());
     }
 
     #[test]
