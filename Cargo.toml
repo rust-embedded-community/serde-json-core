@@ -12,14 +12,14 @@ repository = "https://japaric.github.io/serde-json-core/serde_json_core"
 version = "0.0.1"
 
 [dependencies]
-heapless = "0.4.4"
+heapless = "0.4.0"
 
 [dependencies.serde]
 default-features = false
-version = "1.0.91"
+version = "1.0.80"
 
 [dev-dependencies]
-serde_derive = "1.0.91"
+serde_derive = "1.0.80"
 
 [features]
 std = ["serde/std"]
