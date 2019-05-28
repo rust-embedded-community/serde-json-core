@@ -126,7 +126,7 @@ macro_rules! serialize_signed {
 macro_rules! serialize_fmt {
     ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
         let mut s: String<$uxx> = String::new();
-        write!(&mut s, $fmt, $v).or(Err(Error::BufferFull))?;
+        write!(&mut s, $fmt, $v).unwrap();
         $self.buf.extend_from_slice(s.as_bytes())?;
         Ok(())
     }};
@@ -197,11 +197,11 @@ where
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
-        serialize_fmt!(self, U32, "{:e}", v)
+        serialize_fmt!(self, U16, "{:e}", v)
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
-        serialize_fmt!(self, U64, "{:e}", v)
+        serialize_fmt!(self, U32, "{:e}", v)
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {
@@ -524,14 +524,15 @@ mod tests {
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: -20.345 }).unwrap(),
-            r#"{"temperature":-2.0345e1}"#
+            &*crate::to_string::<N, _>(&Temperature { temperature: -20345. }).unwrap(),
+            r#"{"temperature":-2.0345e4}"#
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: -20.3456789e-30 }).unwrap(),
-            r#"{"temperature":-2.0345679e-29}"#
+            &*crate::to_string::<N, _>(&Temperature { temperature: -2.3456789012345e-23 }).unwrap(),
+            r#"{"temperature":-2.3456788e-23}"#
         );
+
     }
 
 
