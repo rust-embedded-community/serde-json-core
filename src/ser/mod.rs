@@ -4,7 +4,7 @@ use core::{fmt, fmt::Write, mem};
 
 use serde::ser;
 
-use heapless::{String, Vec};
+use heapless::{String, Vec, consts::*};
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -123,6 +123,15 @@ macro_rules! serialize_signed {
     }};
 }
 
+macro_rules! serialize_fmt {
+    ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
+        let mut s: String<$uxx> = String::new();
+        write!(&mut s, $fmt, $v).or(Err(Error::BufferFull))?;
+        $self.buf.extend_from_slice(s.as_bytes())?;
+        Ok(())
+    }};
+}
+
 impl<'a, B> ser::Serializer for &'a mut Serializer<B>
 where
     B: heapless::ArrayLength<u8>,
@@ -188,14 +197,11 @@ where
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
-        let mut s: String<heapless::consts::U32> = String::new();
-        write!(&mut s, "{:e}", v).unwrap();
-        self.buf.extend_from_slice(s.as_bytes())?;
-        Ok(())
+        serialize_fmt!(self, U32, "{:e}", v)
     }
 
-    fn serialize_f64(self, _v: f64) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
+        serialize_fmt!(self, U64, "{:e}", v)
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {

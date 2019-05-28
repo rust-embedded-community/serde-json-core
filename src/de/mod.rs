@@ -277,6 +277,26 @@ macro_rules! deserialize_signed {
     }};
 }
 
+macro_rules! deserialize_fromstr {
+    ($self:ident, $visitor:ident, $typ:ident, $visit_fn:ident, $pattern:expr) => {{
+        let start = $self.index;
+        loop {
+            match $self.peek() {
+                Some(c) => {
+                    if $pattern.iter().find(|&&d| d == c).is_some() {
+                        $self.eat_char();
+                    } else {
+                        let s = str::from_utf8(&$self.slice[start..$self.index]).unwrap();
+                        let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
+                        return $visitor.$visit_fn(v);
+                    }
+                },
+                None => return Err(Error::EofWhileParsingNumber),
+            }
+        }
+    }};
+}
+
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
@@ -369,29 +389,15 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
-        let start = self.index;
-        loop {
-            match self.peek() {
-                Some(b'-') | Some(b'0'..=b'9') | Some(b'.') | Some(b'e') | Some(b'E') => {
-                    self.eat_char();
-                },
-                Some(_) => {
-                    let s = str::from_utf8(&self.slice[start..self.index])
-                        .or(Err(Error::InvalidNumber))?;
-                    let v = f32::from_str(s)
-                        .or(Err(Error::InvalidNumber))?;
-                    return visitor.visit_f32(v);
-                },
-                None => return Err(Error::EofWhileParsingNumber),
-            }
-        }
+        deserialize_fromstr!(self, visitor, f32, visit_f32, b"-0123456789.eE")
     }
 
-    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        deserialize_fromstr!(self, visitor, f64, visit_f64, b"-0123456789.eE")
     }
 
     fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
