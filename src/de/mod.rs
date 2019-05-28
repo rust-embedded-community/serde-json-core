@@ -377,12 +377,12 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
                 },
                 Some(_) => {
                     let s = str::from_utf8(&self.slice[start..self.index])
-                        .or(Err(Error::InvalidUnicodeCodePoint))?;
+                        .or(Err(Error::InvalidNumber))?;
                     let v = f32::from_str(s)
                         .or(Err(Error::InvalidNumber))?;
                     return visitor.visit_f32(v);
                 },
-                None => return Err(Error::EofWhileParsingString),
+                None => return Err(Error::EofWhileParsingNumber),
             }
         }
     }
