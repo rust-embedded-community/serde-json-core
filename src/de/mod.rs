@@ -391,7 +391,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
-        deserialize_fromstr!(self, visitor, f32, visit_f32, b"-0123456789.eE")
+        deserialize_fromstr!(self, visitor, f32, visit_f32, b"0123456789+-.eE")
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
@@ -399,7 +399,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
-        deserialize_fromstr!(self, visitor, f64, visit_f64, b"-0123456789.eE")
+        deserialize_fromstr!(self, visitor, f64, visit_f64, b"0123456789+-.eE")
     }
 
     fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
