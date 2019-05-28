@@ -1,10 +1,9 @@
 //! Deserialize JSON data to a Rust data structure
 
 use core::{fmt, str};
+use core::str::FromStr;
 
 use serde::de::{self, Visitor};
-
-use lexical_core::{try_atof32_lossy_slice, ErrorCode};
 
 use self::enum_::UnitVariantAccess;
 use self::map::MapAccess;
@@ -370,14 +369,21 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
-        let r = try_atof32_lossy_slice(&self.slice[self.index..]);
-        match r.error.code {
-            ErrorCode::Success | ErrorCode::InvalidDigit => {
-                self.index += r.error.index;
-                visitor.visit_f32(r.value)
-            },
-            ErrorCode::Empty => Err(Error::EofWhileParsingNumber),
-            _ => Err(Error::InvalidNumber)
+        let start = self.index;
+        loop {
+            match self.peek() {
+                Some(b'-') | Some(b'0'..=b'9') | Some(b'.') | Some(b'e') | Some(b'E') => {
+                    self.eat_char();
+                },
+                Some(_) => {
+                    let s = str::from_utf8(&self.slice[start..self.index])
+                        .or(Err(Error::InvalidUnicodeCodePoint))?;
+                    let v = f32::from_str(s)
+                        .or(Err(Error::InvalidNumber))?;
+                    return visitor.visit_f32(v);
+                },
+                None => return Err(Error::EofWhileParsingString),
+            }
         }
     }
 

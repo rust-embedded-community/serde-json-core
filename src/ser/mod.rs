@@ -1,12 +1,10 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::{fmt, mem};
+use core::{fmt, fmt::Write, mem};
 
 use serde::ser;
 
 use heapless::{String, Vec};
-
-use lexical_core::{f32toa_slice, MAX_F32_SIZE};
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -190,8 +188,9 @@ where
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
-        let mut s: [u8; MAX_F32_SIZE] = [0; MAX_F32_SIZE];
-        self.buf.extend_from_slice(f32toa_slice(v, &mut s))?;
+        let mut s: String<heapless::consts::U32> = String::new();
+        write!(&mut s, "{}", v).unwrap();
+        self.buf.extend_from_slice(s.as_bytes())?;
         Ok(())
     }
 
@@ -515,7 +514,7 @@ mod tests {
 
         assert_eq!(
             &*crate::to_string::<N, _>(&Temperature { temperature: -20. }).unwrap(),
-            r#"{"temperature":-20.0}"#
+            r#"{"temperature":-20}"#
         );
     }
 
