@@ -63,6 +63,9 @@ pub enum Error {
     /// JSON has a comma after the last value in an array or map.
     TrailingComma,
 
+    /// Error with a custom message that we had to discard.
+    CustomError,
+
     #[doc(hidden)]
     __Extensible,
 }
@@ -276,6 +279,7 @@ macro_rules! deserialize_signed {
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
+    /// Unsupported. Can’t parse a value without knowing its expected type.
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -396,6 +400,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
+    /// Unsupported. String is not available in no-std.
     fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -403,6 +408,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported
     fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -410,6 +416,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported
     fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -431,6 +438,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
+    /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -438,6 +446,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -445,6 +454,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
     fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -480,14 +490,17 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self,
         _name: &'static str,
         _len: usize,
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_seq(visitor)
     }
 
+    /// Unsupported. Can’t make an arbitrary-sized map in no-std. Use a struct with a
+    /// known format, or implement a custom map deserializer / visitor:
+    /// https://serde.rs/deserialize-map.html
     fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -541,20 +554,45 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_str(visitor)
     }
 
-    fn deserialize_ignored_any<V>(self, _visitor: V) -> Result<V::Value>
+    /// Used to throw out fields from JSON objects that we don’t want to
+    /// keep in our structs.
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+            b'"' => self.deserialize_str(visitor),
+            b'[' => self.deserialize_seq(visitor),
+            b'{' => self.deserialize_struct("ignored", &[], visitor),
+            b',' | b'}' | b']' => Err(Error::ExpectedSomeValue),
+            // If it’s something else then we chomp until we get to an end delimiter.
+            // This does technically allow for illegal JSON since we’re just ignoring
+            // characters rather than parsing them.
+            _ => loop {
+                match self.peek() {
+                    // The visitor is expected to be UnknownAny’s visitor, which
+                    // implements visit_unit to return its unit Ok result.
+                    Some(b',') | Some(b'}') | Some(b']') => break visitor.visit_unit(),
+                    Some(_) => self.eat_char(),
+                    None => break Err(Error::EofWhileParsingString),
+                }
+            },
+        }
     }
 }
 
 impl de::Error for Error {
+    // We can’t alloc a String to save the msg in, so we have this less-than-useful
+    // error as better than panicking with unreachable!. These errors can arise from
+    // derive, such as "not enough elements in a tuple" and "missing required field".
+    //
+    // TODO: consider using a heapless::String to save the first n characters of this
+    // message.
     fn custom<T>(_msg: T) -> Self
     where
         T: fmt::Display,
     {
-        unreachable!()
+        Error::CustomError
     }
 }
 
@@ -594,6 +632,7 @@ impl fmt::Display for Error {
                      value."
                 }
                 Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
+                Error::CustomError => "JSON does not match deserializer’s expected format.",
                 _ => "Invalid JSON",
             }
         )
@@ -754,6 +793,69 @@ mod tests {
         // out of range
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 256 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
+    }
+
+    #[test]
+    fn struct_tuple() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Xy(i8, i8);
+
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+
+        // wrong number of args
+        assert_eq!(crate::from_str::<Xy>(r#"[10]"#), Err(crate::de::Error::CustomError));
+        assert_eq!(crate::from_str::<Xy>(r#"[10, 20, 30]"#), Err(crate::de::Error::TrailingCharacters));
+    }
+
+    #[test]
+    fn ignoring_extra_fields() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Temperature {
+            temperature: u8,
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "high": 80, "low": -10, "updated": true }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(
+                r#"{ "temperature": 20, "conditions": "windy", "forecast": "cloudy" }"#
+            ),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "hourly_conditions": ["windy", "rainy"] }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "invalid": this-is-ignored }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": }"#),
+            Err(crate::de::Error::ExpectedSomeValue)
+        );
+
+        assert_eq!(
+            crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": [ }"#),
+            Err(crate::de::Error::ExpectedSomeValue)
+        );
+
+        assert_eq!(
+            crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": ] }"#),
+            Err(crate::de::Error::ExpectedSomeValue)
+        );
     }
 
     // See https://iot.mozilla.org/wot/#thing-resource

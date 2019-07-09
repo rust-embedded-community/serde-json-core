@@ -289,10 +289,12 @@ impl<'de, 'a> de::Deserializer<'de> for MapKey<'a, 'de> {
         self.deserialize_str(visitor)
     }
 
-    fn deserialize_ignored_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        // Even if we’re ignoring the contents of the map, we still need to
+        // deserialize the string here in order to chomp the key’s characters.
+        self.deserialize_str(visitor)
     }
 }
