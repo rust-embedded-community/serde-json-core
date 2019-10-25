@@ -1,6 +1,6 @@
 //! Deserialize JSON data to a Rust data structure
 
-use std::{fmt, error};
+use std::{fmt, error, str::from_utf8};
 
 use serde::de::{self, Visitor};
 
@@ -212,7 +212,7 @@ impl<'a> Deserializer<'a> {
                 Some(b'"') => {
                     let end = self.index;
                     self.eat_char();
-                    return str::from_utf8(&self.slice[start..end])
+                    return from_utf8(&self.slice[start..end])
                         .map_err(|_| Error::InvalidUnicodeCodePoint);
                 }
                 Some(_) => self.eat_char(),

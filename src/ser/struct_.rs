@@ -23,13 +23,13 @@ impl<'a> ser::SerializeStruct for SerializeStruct<'a> {
     {
         // XXX if `value` is `None` we not produce any output for this field
         if !self.first {
-            self.de.buf.push(b',')?;
+            self.de.buf.push(b',');
         }
         self.first = false;
 
-        self.de.buf.push(b'"')?;
-        self.de.buf.extend_from_slice(key.as_bytes())?;
-        self.de.buf.extend_from_slice(b"\":")?;
+        self.de.buf.push(b'"');
+        self.de.buf.extend_from_slice(key.as_bytes());
+        self.de.buf.extend_from_slice(b"\":");
 
         value.serialize(&mut *self.de)?;
 
@@ -37,7 +37,7 @@ impl<'a> ser::SerializeStruct for SerializeStruct<'a> {
     }
 
     fn end(self) -> Result<Self::Ok> {
-        self.de.buf.push(b'}')?;
+        self.de.buf.push(b'}');
         Ok(())
     }
 }

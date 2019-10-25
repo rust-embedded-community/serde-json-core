@@ -1,7 +1,5 @@
 use serde::ser;
 
-use heapless::ArrayLength;
-
 use crate::ser::{Error, Result, Serializer};
 
 pub struct SerializeSeq<'a>  {
@@ -24,7 +22,7 @@ impl<'a> ser::SerializeSeq for SerializeSeq<'a>  {
         T: ser::Serialize,
     {
         if !self.first {
-            self.de.buf.push(b',')?;
+            self.de.buf.push(b',');
         }
         self.first = false;
 
@@ -33,7 +31,7 @@ impl<'a> ser::SerializeSeq for SerializeSeq<'a>  {
     }
 
     fn end(self) -> Result<Self::Ok> {
-        self.de.buf.push(b']')?;
+        self.de.buf.push(b']');
         Ok(())
     }
 }

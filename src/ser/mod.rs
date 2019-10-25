@@ -68,7 +68,7 @@ impl Serializer {
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
     ($self:ident, $N:expr, $v:expr) => {{
-        let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
+        let mut buf = [0u8; $N];
 
         let mut v = $v;
         let mut i = $N - 1;
@@ -83,7 +83,7 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self.buf.extend_from_slice(&buf[i..]);
         Ok(())
     }};
 }
@@ -99,7 +99,7 @@ macro_rules! serialize_signed {
             (false, v as $uxx)
         };
 
-        let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
+        let mut buf = [0u8; $N];
         let mut i = $N - 1;
         loop {
             buf[i] = (v % 10) as u8 + b'0';
@@ -117,7 +117,7 @@ macro_rules! serialize_signed {
         } else {
             i += 1;
         }
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self.buf.extend_from_slice(&buf[i..]);
         Ok(())
     }};
 }
@@ -135,11 +135,10 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
-            self.buf.extend_from_slice(b"true")?;
+            self.buf.extend_from_slice(b"true");
         } else {
-            self.buf.extend_from_slice(b"false")?;
+            self.buf.extend_from_slice(b"false");
         }
-
         Ok(())
     }
 
@@ -196,9 +195,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
-        self.buf.push(b'"')?;
-        self.buf.extend_from_slice(v.as_bytes())?;
-        self.buf.push(b'"')?;
+        self.buf.push(b'"');
+        self.buf.extend_from_slice(v.as_bytes());
+        self.buf.push(b'"');
         Ok(())
     }
 
@@ -207,7 +206,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        self.buf.extend_from_slice(b"null")?;
+        self.buf.extend_from_slice(b"null");
         Ok(())
     }
 
@@ -260,7 +259,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.buf.push(b'[')?;
+        self.buf.push(b'[');
 
         Ok(SerializeSeq::new(self))
     }
@@ -292,7 +291,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.buf.push(b'{')?;
+        self.buf.push(b'{');
 
         Ok(SerializeStruct::new(self))
     }
