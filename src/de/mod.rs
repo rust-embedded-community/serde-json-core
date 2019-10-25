@@ -1,6 +1,6 @@
 //! Deserialize JSON data to a Rust data structure
 
-use std::{fmt, error, str::from_utf8};
+use std::{error, fmt, str::from_utf8};
 
 use serde::de::{self, Visitor};
 
@@ -118,7 +118,6 @@ impl fmt::Display for Error {
         )
     }
 }
-
 
 pub(crate) struct Deserializer<'b> {
     slice: &'b [u8],
@@ -603,7 +602,6 @@ impl de::Error for Error {
         unreachable!()
     }
 }
-
 
 /// Deserializes an instance of type `T` from bytes of JSON text
 pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<T>

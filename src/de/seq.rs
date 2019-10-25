@@ -2,7 +2,7 @@ use serde::de;
 
 use crate::de::{Deserializer, Error, Result};
 
-pub(crate) struct SeqAccess<'a, 'b>  {
+pub(crate) struct SeqAccess<'a, 'b> {
     first: bool,
     de: &'a mut Deserializer<'b>,
 }

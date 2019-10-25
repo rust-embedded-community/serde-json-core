@@ -2,7 +2,7 @@ use serde::ser;
 
 use crate::ser::{Error, Result, Serializer};
 
-pub struct SerializeSeq<'a>  {
+pub struct SerializeSeq<'a> {
     de: &'a mut Serializer,
     first: bool,
 }
@@ -13,7 +13,7 @@ impl<'a> SerializeSeq<'a> {
     }
 }
 
-impl<'a> ser::SerializeSeq for SerializeSeq<'a>  {
+impl<'a> ser::SerializeSeq for SerializeSeq<'a> {
     type Ok = ();
     type Error = Error;
 
@@ -36,7 +36,7 @@ impl<'a> ser::SerializeSeq for SerializeSeq<'a>  {
     }
 }
 
-impl<'a> ser::SerializeTuple for SerializeSeq<'a>  {
+impl<'a> ser::SerializeTuple for SerializeSeq<'a> {
     type Ok = ();
     type Error = Error;
 

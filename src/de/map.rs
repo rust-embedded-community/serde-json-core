@@ -2,7 +2,7 @@ use serde::de::{self, Visitor};
 
 use crate::de::{Deserializer, Error};
 
-pub struct MapAccess<'a, 'b>  {
+pub struct MapAccess<'a, 'b> {
     de: &'a mut Deserializer<'b>,
     first: bool,
 }
@@ -57,7 +57,7 @@ impl<'a, 'de> de::MapAccess<'de> for MapAccess<'a, 'de> {
     }
 }
 
-struct MapKey<'a, 'b>  {
+struct MapKey<'a, 'b> {
     de: &'a mut Deserializer<'b>,
 }
 

@@ -1,6 +1,6 @@
 //! Serialize a Rust data structure into JSON data
 
-use std::{fmt, error};
+use std::{error, fmt};
 
 use serde::ser;
 
@@ -36,7 +36,6 @@ impl From<u8> for Error {
     }
 }
 
-
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
@@ -53,8 +52,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub(crate) struct Serializer
-{
+pub(crate) struct Serializer {
     buf: Vec<u8>,
 }
 
@@ -434,15 +432,9 @@ mod tests {
             Number,
         }
 
-        assert_eq!(
-            &*crate::to_string(&Type::Boolean).unwrap(),
-            r#""boolean""#
-        );
+        assert_eq!(&*crate::to_string(&Type::Boolean).unwrap(), r#""boolean""#);
 
-        assert_eq!(
-            &*crate::to_string(&Type::Number).unwrap(),
-            r#""number""#
-        );
+        assert_eq!(&*crate::to_string(&Type::Number).unwrap(), r#""number""#);
     }
 
     #[test]

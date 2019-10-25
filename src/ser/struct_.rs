@@ -7,7 +7,7 @@ pub struct SerializeStruct<'a> {
     first: bool,
 }
 
-impl<'a> SerializeStruct<'a>  {
+impl<'a> SerializeStruct<'a> {
     pub(crate) fn new(de: &'a mut Serializer) -> Self {
         SerializeStruct { de, first: true }
     }

@@ -2,7 +2,7 @@ use serde::de;
 
 use crate::de::{Deserializer, Error, Result};
 
-pub(crate) struct UnitVariantAccess<'a, 'b>  {
+pub(crate) struct UnitVariantAccess<'a, 'b> {
     de: &'a mut Deserializer<'b>,
 }
 
