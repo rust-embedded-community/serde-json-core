@@ -1,30 +1,19 @@
 use serde::ser;
 
-use heapless::ArrayLength;
-
 use crate::ser::{Error, Result, Serializer};
 
-pub struct SerializeStruct<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    de: &'a mut Serializer<B>,
+pub struct SerializeStruct<'a> {
+    de: &'a mut Serializer,
     first: bool,
 }
 
-impl<'a, B> SerializeStruct<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    pub(crate) fn new(de: &'a mut Serializer<B>) -> Self {
+impl<'a> SerializeStruct<'a>  {
+    pub(crate) fn new(de: &'a mut Serializer) -> Self {
         SerializeStruct { de, first: true }
     }
 }
 
-impl<'a, B> ser::SerializeStruct for SerializeStruct<'a, B>
-where
-    B: ArrayLength<u8>,
-{
+impl<'a> ser::SerializeStruct for SerializeStruct<'a> {
     type Ok = ();
     type Error = Error;
 
