@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 name = "serde-json-wasm"
 readme = "README.md"
 repository = "https://github.com/confio/serde-json-wasm"
-version = "0.0.2"
+version = "0.1.0"
 
 [dependencies]
 serde = {version = "^1.0.80", default-features = false }
