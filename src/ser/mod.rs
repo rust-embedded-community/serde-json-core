@@ -129,7 +129,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeTupleVariant = Unreachable;
     type SerializeMap = Unreachable;
     type SerializeStruct = SerializeStruct<'a>;
-    type SerializeStructVariant = Unreachable;
+    type SerializeStructVariant = SerializeStruct<'a>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
@@ -302,12 +302,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_struct_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         _variant_index: u32,
-        _variant: &'static str,
-        _len: usize,
+        variant: &'static str,
+        len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        unreachable!()
+        self.buf.push(b'{');
+        self.serialize_str(variant)?;
+        self.buf.push(b':');
+        self.serialize_struct(name, len)
     }
 
     fn collect_str<T: ?Sized>(self, _value: &T) -> Result<Self::Ok>
