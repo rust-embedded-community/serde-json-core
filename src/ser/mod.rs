@@ -235,25 +235,31 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     fn serialize_newtype_struct<T: ?Sized>(
         self,
         _name: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        unreachable!()
+
+        value.serialize(&mut *self)
     }
 
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
         _variant_index: u32,
-        _variant: &'static str,
-        _value: &T,
+        variant: &'static str,
+        value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        unreachable!()
+        self.buf.push(b'{');
+        self.serialize_str(variant)?;
+        self.buf.push(b':');
+        value.serialize(&mut *self)?;
+        self.buf.push(b'}');
+        Ok(())
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
@@ -536,4 +542,40 @@ mod tests {
             r#"{"a":true,"b":false}"#
         );
     }
+
+    #[test]
+    fn serialize_embedded_enum() {
+        #[derive(Debug, Serialize, PartialEq)]
+        #[serde(rename_all = "lowercase")]
+        pub enum MyResult {
+            Ok(Response),
+            Err(String),
+        }
+
+        #[derive(Debug, Serialize, PartialEq)]
+        pub struct Response {
+            pub log: Option<String>,
+            pub count: i64,
+            pub list: Vec<u32>,
+        }
+
+        let json = crate::to_string(&MyResult::Err("some error".to_string())).expect("encode err enum");
+        assert_eq!(json, r#"{"err":"some error"}"#.to_string());
+
+        let json = crate::to_string(&MyResult::Ok(Response {
+            log: Some("log message".to_string()),
+            count: 137,
+            list: Vec::new(),
+        })).expect("encode ok enum");
+        assert_eq!(json, r#"{"ok":{"log":"log message","count":137,"list":[]}}"#.to_string());
+
+        let json = crate::to_string(&MyResult::Ok(Response {
+            log: None,
+            count: 137,
+            list: vec![18u32, 34, 12],
+        })).expect("encode ok enum");
+        assert_eq!(json, r#"{"ok":{"log":null,"count":137,"list":[18,34,12]}}"#.to_string());
+
+    }
+
 }
