@@ -69,8 +69,8 @@ impl<'a, 'de> de::EnumAccess<'de> for StructVariantAccess<'a, 'de> {
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self)>
-        where
-            V: de::DeserializeSeed<'de>,
+    where
+        V: de::DeserializeSeed<'de>,
     {
         let val = seed.deserialize(&mut *self.de)?;
         self.de.parse_object_colon()?;
@@ -86,30 +86,34 @@ impl<'a, 'de> de::VariantAccess<'de> for StructVariantAccess<'a, 'de> {
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
-        where
-            T: de::DeserializeSeed<'de>,
+    where
+        T: de::DeserializeSeed<'de>,
     {
         let value = seed.deserialize(&mut *self.de)?;
         // we remove trailing '}' to be consistent with struct_variant algorithm
-        match self.de.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+        match self
+            .de
+            .parse_whitespace()
+            .ok_or(Error::EofWhileParsingValue)?
+        {
             b'}' => {
                 self.de.eat_char();
                 Ok(value)
-            },
+            }
             _ => Err(Error::ExpectedSomeValue),
         }
     }
 
     fn tuple_variant<V>(self, _len: usize, _visitor: V) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         Err(Error::InvalidType)
     }
 
     fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
-        where
-            V: de::Visitor<'de>,
+    where
+        V: de::Visitor<'de>,
     {
         de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }

@@ -47,8 +47,8 @@ impl<'a> ser::SerializeStructVariant for SerializeStruct<'a> {
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<()>
-        where
-            T: ser::Serialize,
+    where
+        T: ser::Serialize,
     {
         // XXX if `value` is `None` we not produce any output for this field
         if !self.first {
