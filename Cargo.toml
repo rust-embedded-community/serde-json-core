@@ -1,25 +1,18 @@
 [package]
-authors = ["Jorge Aparicio <jorge@japaric.io>"]
-categories = ["no-std"]
-description = "serde-json for no_std programs"
-documentation = "https://docs.rs/serde-json-core"
+authors = ["Jorge Aparicio <jorge@japaric.io>", "Ethan Frey <ethanfrey@noreply.github.com"]
+categories = ["wasm"]
+description = "serde-json for wasm programs"
+documentation = "https://docs.rs/serde-json-wasm"
 edition = "2018"
-keywords = ["serde", "json"]
+keywords = ["serde", "json", "wasm"]
 license = "MIT OR Apache-2.0"
-name = "serde-json-core"
+name = "serde-json-wasm"
 readme = "README.md"
-repository = "https://japaric.github.io/serde-json-core/serde_json_core"
-version = "0.0.1"
+repository = "https://github.com/confio/serde-json-wasm"
+version = "0.1.0"
 
 [dependencies]
-heapless = "0.4.0"
-
-[dependencies.serde]
-default-features = false
-version = "1.0.80"
+serde = {version = "^1.0.80", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-serde_derive = "1.0.80"
-
-[features]
-std = ["serde/std"]
+serde_derive = "^1.0.80"

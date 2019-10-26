@@ -1,4 +1,4 @@
-//! [`serde-json`] for `no_std` programs
+//! [`serde-json`] for `wasm` programs
 //!
 //! [`serde-json`]: https://crates.io/crates/serde_json
 //!
@@ -57,7 +57,6 @@
 #![deny(rust_2018_compatibility)]
 #![deny(rust_2018_idioms)]
 #![deny(warnings)]
-#![no_std]
 
 pub mod de;
 pub mod ser;

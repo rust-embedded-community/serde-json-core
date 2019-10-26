@@ -1,6 +1,6 @@
 //! Deserialize JSON data to a Rust data structure
 
-use core::{fmt, str};
+use std::{error, fmt, str::from_utf8};
 
 use serde::de::{self, Visitor};
 
@@ -63,14 +63,72 @@ pub enum Error {
     /// JSON has a comma after the last value in an array or map.
     TrailingComma,
 
+    /// Custom error message from serde
+    Custom(String),
+
     #[doc(hidden)]
     __Extensible,
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+
     fn description(&self) -> &str {
-        ""
+        "(use display)"
+    }
+}
+
+impl de::Error for Error {
+    fn custom<T>(msg: T) -> Self
+        where
+            T: fmt::Display,
+    {
+        Error::Custom(msg.to_string())
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Error::EofWhileParsingList => "EOF while parsing a list.",
+                Error::EofWhileParsingObject => "EOF while parsing an object.",
+                Error::EofWhileParsingString => "EOF while parsing a string.",
+                Error::EofWhileParsingValue => "EOF while parsing a JSON value.",
+                Error::ExpectedColon => "Expected this character to be a `':'`.",
+                Error::ExpectedListCommaOrEnd => {
+                    "Expected this character to be either a `','` or\
+                     a \
+                     `']'`."
+                }
+                Error::ExpectedObjectCommaOrEnd => {
+                    "Expected this character to be either a `','` \
+                     or a \
+                     `'}'`."
+                }
+                Error::ExpectedSomeIdent => {
+                    "Expected to parse either a `true`, `false`, or a \
+                     `null`."
+                }
+                Error::ExpectedSomeValue => "Expected this character to start a JSON value.",
+                Error::InvalidNumber => "Invalid number.",
+                Error::InvalidType => "Invalid type",
+                Error::InvalidUnicodeCodePoint => "Invalid unicode code point.",
+                Error::KeyMustBeAString => "Object key is not a string.",
+                Error::TrailingCharacters => {
+                    "JSON has non-whitespace trailing characters after \
+                     the \
+                     value."
+                }
+                Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
+                Error::Custom(msg) => &msg,
+                _ => "Invalid JSON",
+            }
+        )
     }
 }
 
@@ -166,7 +224,7 @@ impl<'a> Deserializer<'a> {
                 Some(b'"') => {
                     let end = self.index;
                     self.eat_char();
-                    return str::from_utf8(&self.slice[start..end])
+                    return from_utf8(&self.slice[start..end])
                         .map_err(|_| Error::InvalidUnicodeCodePoint);
                 }
                 Some(_) => self.eat_char(),
@@ -276,6 +334,7 @@ macro_rules! deserialize_signed {
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
+    /// Unsupported. Can’t parse a value without knowing its expected type.
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -396,13 +455,23 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        let peek = self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+
+        match peek {
+            b'"' => {
+                self.eat_char();
+                let str = self.parse_str()?.to_string();
+                visitor.visit_string(str)
+            }
+            _ => Err(Error::InvalidType),
+        }
     }
 
+    /// Unsupported
     fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -410,6 +479,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported
     fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -431,6 +501,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
+    /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -438,6 +509,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -445,6 +517,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
+    /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
     fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -456,7 +529,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match self.peek().ok_or(Error::EofWhileParsingValue)? {
+        match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'[' => {
                 self.eat_char();
                 let ret = visitor.visit_seq(SeqAccess::new(self))?;
@@ -480,14 +553,17 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self,
         _name: &'static str,
         _len: usize,
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_seq(visitor)
     }
 
+    /// Unsupported. Can’t make an arbitrary-sized map in no-std. Use a struct with a
+    /// known format, or implement a custom map deserializer / visitor:
+    /// https://serde.rs/deserialize-map.html
     fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
@@ -529,7 +605,10 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+            // if it is a string enum
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
+            // if it is a struct enum
+            b'{' => Err(Error::Custom("TODO: parse enum struct".to_string())),
             _ => Err(Error::ExpectedSomeValue),
         }
     }
@@ -541,62 +620,30 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_str(visitor)
     }
 
-    fn deserialize_ignored_any<V>(self, _visitor: V) -> Result<V::Value>
+    /// Used to throw out fields from JSON objects that we don’t want to
+    /// keep in our structs.
+    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
-    }
-}
-
-impl de::Error for Error {
-    fn custom<T>(_msg: T) -> Self
-    where
-        T: fmt::Display,
-    {
-        unreachable!()
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Error::EofWhileParsingList => "EOF while parsing a list.",
-                Error::EofWhileParsingObject => "EOF while parsing an object.",
-                Error::EofWhileParsingString => "EOF while parsing a string.",
-                Error::EofWhileParsingValue => "EOF while parsing a JSON value.",
-                Error::ExpectedColon => "Expected this character to be a `':'`.",
-                Error::ExpectedListCommaOrEnd => {
-                    "Expected this character to be either a `','` or\
-                     a \
-                     `']'`."
+        match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+            b'"' => self.deserialize_str(visitor),
+            b'[' => self.deserialize_seq(visitor),
+            b'{' => self.deserialize_struct("ignored", &[], visitor),
+            b',' | b'}' | b']' => Err(Error::ExpectedSomeValue),
+            // If it’s something else then we chomp until we get to an end delimiter.
+            // This does technically allow for illegal JSON since we’re just ignoring
+            // characters rather than parsing them.
+            _ => loop {
+                match self.peek() {
+                    // The visitor is expected to be UnknownAny’s visitor, which
+                    // implements visit_unit to return its unit Ok result.
+                    Some(b',') | Some(b'}') | Some(b']') => break visitor.visit_unit(),
+                    Some(_) => self.eat_char(),
+                    None => break Err(Error::EofWhileParsingString),
                 }
-                Error::ExpectedObjectCommaOrEnd => {
-                    "Expected this character to be either a `','` \
-                     or a \
-                     `'}'`."
-                }
-                Error::ExpectedSomeIdent => {
-                    "Expected to parse either a `true`, `false`, or a \
-                     `null`."
-                }
-                Error::ExpectedSomeValue => "Expected this character to start a JSON value.",
-                Error::InvalidNumber => "Invalid number.",
-                Error::InvalidType => "Invalid type",
-                Error::InvalidUnicodeCodePoint => "Invalid unicode code point.",
-                Error::KeyMustBeAString => "Object key is not a string.",
-                Error::TrailingCharacters => {
-                    "JSON has non-whitespace trailing characters after \
-                     the \
-                     value."
-                }
-                Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
-                _ => "Invalid JSON",
-            }
-        )
+            },
+        }
     }
 }
 
@@ -756,9 +803,165 @@ mod tests {
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
     }
 
+    #[test]
+    fn struct_tuple() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Xy(i8, i8);
+
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+
+        // wrong number of args
+        match crate::from_str::<Xy>(r#"[10]"#) {
+            Err(super::Error::Custom(_)) => {},
+            _ => panic!("expect custom error"),
+        }
+        assert_eq!(crate::from_str::<Xy>(r#"[10, 20, 30]"#), Err(crate::de::Error::TrailingCharacters));
+    }
+
+    #[test]
+    fn ignoring_extra_fields() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Temperature {
+            temperature: u8,
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "high": 80, "low": -10, "updated": true }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(
+                r#"{ "temperature": 20, "conditions": "windy", "forecast": "cloudy" }"#
+            ),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "hourly_conditions": ["windy", "rainy"] }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": 20, "invalid": this-is-ignored }"#),
+            Ok(Temperature { temperature: 20 })
+        );
+
+        assert_eq!(
+            crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": }"#),
+            Err(crate::de::Error::ExpectedSomeValue)
+        );
+
+        assert_eq!(
+            crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": [ }"#),
+            Err(crate::de::Error::ExpectedSomeValue)
+        );
+
+        assert_eq!(
+            crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": ] }"#),
+            Err(crate::de::Error::ExpectedSomeValue)
+        );
+    }
+
+    #[test]
+    fn deserialize_optional_vector() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        pub struct Response {
+            pub log: Option<String>,
+            pub messages: Vec<Msg>,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        #[derive(serde_derive::Serialize)]
+        pub struct Msg {
+            pub name: String,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        pub struct OptIn {
+            pub name: Option<String>,
+        }
+
+        let m: Msg = crate::from_str(r#"{
+          "name": "one"
+        }"#).expect("simple");
+        assert_eq!(m, Msg{name: "one".to_string()});
+
+        let o: OptIn = crate::from_str(r#"{
+          "name": "two"
+        }"#).expect("opt");
+        assert_eq!(o, OptIn{name: Some("two".to_string())});
+
+        let res: Response = crate::from_str(r#"{
+          "log": "my log",
+          "messages": [{"name": "one"}]
+        }"#).expect("fud");
+        assert_eq!(res, Response{
+            log: Some("my log".to_string()),
+            messages: vec![Msg{name: "one".to_string()}],
+        });
+
+        let res: Response = crate::from_str(r#"{"log": null,"messages": []}"#).expect("fud");
+        assert_eq!(res, Response{log: None, messages: Vec::new()});
+    }
+
+
+    #[test]
+    fn deserialize_embedded_enum() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        #[serde(rename_all = "lowercase")]
+        pub enum MyResult {
+            Ok(Response),
+            Err(String),
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        pub struct Response {
+            pub log: Option<String>,
+            pub messages: Vec<Msg>,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        pub struct Msg {
+            pub name: String,
+            pub amount: Option<String>,
+        }
+
+        let res: MyResult = crate::from_str(r#"{
+          "ok": {
+            "messages": [{
+                "name": "fred",
+                "amount": "15"
+            }],
+          }
+        }"#).expect("goo");
+        assert_eq!(res, MyResult::Ok(Response{log: Some("hello".to_string()), messages: vec![Msg{name: "fred".to_string(), amount: Some("15".to_string())}]}));
+
+        let res: MyResult= crate::from_str(r#"{
+          "ok": {
+            "log": "hello",
+            "messages": [],
+          }
+        }"#).expect("goo");
+        assert_eq!(res, MyResult::Ok(Response{log: Some("hello".to_string()), messages: Vec::new()}));
+
+        let res: MyResult = crate::from_str(r#"{
+          "ok": {
+            "log": null,
+            "messages": [],
+          }
+        }"#).expect("goo");
+        assert_eq!(res, MyResult::Ok(Response{log: None, messages: Vec::new()}));
+    }
+
     // See https://iot.mozilla.org/wot/#thing-resource
     #[test]
-    #[ignore]
     fn wot() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Thing<'a> {
@@ -786,6 +989,7 @@ mod tests {
             #[serde(borrow)]
             description: Option<&'a str>,
             href: &'a str,
+            owned: Option<String>,
         }
 
         assert_eq!(
@@ -798,17 +1002,21 @@ mod tests {
       "type": "number",
       "unit": "celsius",
       "description": "An ambient temperature sensor",
-      "href": "/properties/temperature"
+      "href": "/properties/temperature",
+      "owned": "own temperature"
     },
     "humidity": {
       "type": "number",
       "unit": "percent",
-      "href": "/properties/humidity"
+      "href": "/properties/humidity",
+      "owned": null
     },
     "led": {
       "type": "boolean",
+      "unit": null,
       "description": "A red LED",
-      "href": "/properties/led"
+      "href": "/properties/led",
+      "owned": "own led"
     }
   }
 }
@@ -818,21 +1026,24 @@ mod tests {
                 properties: Properties {
                     temperature: Property {
                         ty: Type::Number,
-                        unit: Some("celcius"),
+                        unit: Some("celsius"),
                         description: Some("An ambient temperature sensor"),
                         href: "/properties/temperature",
+                        owned: Some("own temperature".to_string()),
                     },
                     humidity: Property {
                         ty: Type::Number,
                         unit: Some("percent"),
                         description: None,
                         href: "/properties/humidity",
+                        owned: None,
                     },
                     led: Property {
                         ty: Type::Boolean,
                         unit: None,
                         description: Some("A red LED"),
                         href: "/properties/led",
+                        owned: Some("own led".to_string()),
                     },
                 },
                 ty: Type::Thing,

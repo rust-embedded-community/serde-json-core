@@ -1,10 +1,10 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::{fmt, mem};
+use std::{error, fmt};
 
 use serde::ser;
 
-use heapless::{String, Vec};
+use std::vec::Vec;
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -36,10 +36,13 @@ impl From<u8> for Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+
     fn description(&self) -> &str {
-        ""
+        "(use display)"
     }
 }
 
@@ -49,17 +52,11 @@ impl fmt::Display for Error {
     }
 }
 
-pub(crate) struct Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
-    buf: Vec<u8, B>,
+pub(crate) struct Serializer {
+    buf: Vec<u8>,
 }
 
-impl<B> Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
+impl Serializer {
     fn new() -> Self {
         Serializer { buf: Vec::new() }
     }
@@ -69,7 +66,7 @@ where
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
     ($self:ident, $N:expr, $v:expr) => {{
-        let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
+        let mut buf = [0u8; $N];
 
         let mut v = $v;
         let mut i = $N - 1;
@@ -84,7 +81,7 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self.buf.extend_from_slice(&buf[i..]);
         Ok(())
     }};
 }
@@ -100,7 +97,7 @@ macro_rules! serialize_signed {
             (false, v as $uxx)
         };
 
-        let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
+        let mut buf = [0u8; $N];
         let mut i = $N - 1;
         loop {
             buf[i] = (v % 10) as u8 + b'0';
@@ -118,32 +115,28 @@ macro_rules! serialize_signed {
         } else {
             i += 1;
         }
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self.buf.extend_from_slice(&buf[i..]);
         Ok(())
     }};
 }
 
-impl<'a, B> ser::Serializer for &'a mut Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
+impl<'a> ser::Serializer for &'a mut Serializer {
     type Ok = ();
     type Error = Error;
-    type SerializeSeq = SerializeSeq<'a, B>;
-    type SerializeTuple = SerializeSeq<'a, B>;
+    type SerializeSeq = SerializeSeq<'a>;
+    type SerializeTuple = SerializeSeq<'a>;
     type SerializeTupleStruct = Unreachable;
     type SerializeTupleVariant = Unreachable;
     type SerializeMap = Unreachable;
-    type SerializeStruct = SerializeStruct<'a, B>;
+    type SerializeStruct = SerializeStruct<'a>;
     type SerializeStructVariant = Unreachable;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
-            self.buf.extend_from_slice(b"true")?;
+            self.buf.extend_from_slice(b"true");
         } else {
-            self.buf.extend_from_slice(b"false")?;
+            self.buf.extend_from_slice(b"false");
         }
-
         Ok(())
     }
 
@@ -200,9 +193,9 @@ where
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
-        self.buf.push(b'"')?;
-        self.buf.extend_from_slice(v.as_bytes())?;
-        self.buf.push(b'"')?;
+        self.buf.push(b'"');
+        self.buf.extend_from_slice(v.as_bytes());
+        self.buf.push(b'"');
         Ok(())
     }
 
@@ -211,7 +204,7 @@ where
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        self.buf.extend_from_slice(b"null")?;
+        self.buf.extend_from_slice(b"null");
         Ok(())
     }
 
@@ -264,7 +257,7 @@ where
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.buf.push(b'[')?;
+        self.buf.push(b'[');
 
         Ok(SerializeSeq::new(self))
     }
@@ -296,7 +289,7 @@ where
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.buf.push(b'{')?;
+        self.buf.push(b'{');
 
         Ok(SerializeStruct::new(self))
     }
@@ -320,9 +313,8 @@ where
 }
 
 /// Serializes the given data structure as a string of JSON text
-pub fn to_string<B, T>(value: &T) -> Result<String<B>>
+pub fn to_string<T>(value: &T) -> Result<String>
 where
-    B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
     let mut ser = Serializer::new();
@@ -331,9 +323,8 @@ where
 }
 
 /// Serializes the given data structure as a JSON byte vector
-pub fn to_vec<B, T>(value: &T) -> Result<Vec<u8, B>>
+pub fn to_vec<T>(value: &T) -> Result<Vec<u8>>
 where
-    B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
     let mut ser = Serializer::new();
@@ -421,18 +412,14 @@ impl ser::SerializeStructVariant for Unreachable {
 mod tests {
     use serde_derive::Serialize;
 
-    use heapless::consts::U128;
-
-    type N = U128;
-
     #[test]
     fn array() {
-        assert_eq!(&*crate::to_string::<N, _>(&[0, 1, 2]).unwrap(), "[0,1,2]");
+        assert_eq!(&*crate::to_string(&[0, 1, 2]).unwrap(), "[0,1,2]");
     }
 
     #[test]
     fn bool() {
-        assert_eq!(&*crate::to_string::<N, _>(&true).unwrap(), "true");
+        assert_eq!(&*crate::to_string(&true).unwrap(), "true");
     }
 
     #[test]
@@ -445,20 +432,14 @@ mod tests {
             Number,
         }
 
-        assert_eq!(
-            &*crate::to_string::<N, _>(&Type::Boolean).unwrap(),
-            r#""boolean""#
-        );
+        assert_eq!(&*crate::to_string(&Type::Boolean).unwrap(), r#""boolean""#);
 
-        assert_eq!(
-            &*crate::to_string::<N, _>(&Type::Number).unwrap(),
-            r#""number""#
-        );
+        assert_eq!(&*crate::to_string(&Type::Number).unwrap(), r#""number""#);
     }
 
     #[test]
     fn str() {
-        assert_eq!(&*crate::to_string::<N, _>("hello").unwrap(), r#""hello""#);
+        assert_eq!(&*crate::to_string("hello").unwrap(), r#""hello""#);
     }
 
     #[test]
@@ -469,7 +450,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Led { led: true }).unwrap(),
+            &*crate::to_string(&Led { led: true }).unwrap(),
             r#"{"led":true}"#
         );
     }
@@ -482,22 +463,22 @@ mod tests {
         }
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: 127 }).unwrap(),
+            &*crate::to_string(&Temperature { temperature: 127 }).unwrap(),
             r#"{"temperature":127}"#
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
+            &*crate::to_string(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: -17 }).unwrap(),
+            &*crate::to_string(&Temperature { temperature: -17 }).unwrap(),
             r#"{"temperature":-17}"#
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: -128 }).unwrap(),
+            &*crate::to_string(&Temperature { temperature: -128 }).unwrap(),
             r#"{"temperature":-128}"#
         );
     }
@@ -510,7 +491,7 @@ mod tests {
         }
 
         assert_eq!(
-            crate::to_string::<N, _>(&Property {
+            crate::to_string(&Property {
                 description: Some("An ambient temperature sensor"),
             })
             .unwrap(),
@@ -519,7 +500,7 @@ mod tests {
 
         // XXX Ideally this should produce "{}"
         assert_eq!(
-            crate::to_string::<N, _>(&Property { description: None }).unwrap(),
+            crate::to_string(&Property { description: None }).unwrap(),
             r#"{"description":null}"#
         );
     }
@@ -532,7 +513,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: 20 }).unwrap(),
+            &*crate::to_string(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
     }
@@ -542,7 +523,7 @@ mod tests {
         #[derive(Serialize)]
         struct Empty {}
 
-        assert_eq!(&*crate::to_string::<N, _>(&Empty {}).unwrap(), r#"{}"#);
+        assert_eq!(&*crate::to_string(&Empty {}).unwrap(), r#"{}"#);
 
         #[derive(Serialize)]
         struct Tuple {
@@ -551,7 +532,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Tuple { a: true, b: false }).unwrap(),
+            &*crate::to_string(&Tuple { a: true, b: false }).unwrap(),
             r#"{"a":true,"b":false}"#
         );
     }
