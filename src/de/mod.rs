@@ -605,7 +605,10 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+            // if it is a string enum
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
+            // if it is a struct enum
+            b'{' => Err(Error::Custom("TODO: parse enum struct".to_string())),
             _ => Err(Error::ExpectedSomeValue),
         }
     }
