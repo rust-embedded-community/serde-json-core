@@ -441,11 +441,20 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        let peek = self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+
+        match peek {
+            b'"' => {
+                self.eat_char();
+                let str = self.parse_str()?.to_string();
+                visitor.visit_string(str)
+            }
+            _ => Err(Error::InvalidType),
+        }
     }
 
     fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
@@ -599,6 +608,7 @@ impl de::Error for Error {
     where
         T: fmt::Display,
     {
+        // TODO
         unreachable!()
     }
 }
@@ -761,7 +771,6 @@ mod tests {
 
     // See https://iot.mozilla.org/wot/#thing-resource
     #[test]
-    #[ignore]
     fn wot() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Thing<'a> {
@@ -789,6 +798,7 @@ mod tests {
             #[serde(borrow)]
             description: Option<&'a str>,
             href: &'a str,
+            owned: String,
         }
 
         assert_eq!(
@@ -801,17 +811,20 @@ mod tests {
       "type": "number",
       "unit": "celsius",
       "description": "An ambient temperature sensor",
-      "href": "/properties/temperature"
+      "href": "/properties/temperature",
+      "owned": "own temperature"
     },
     "humidity": {
       "type": "number",
       "unit": "percent",
-      "href": "/properties/humidity"
+      "href": "/properties/humidity",
+      "owned": "own humidity"
     },
     "led": {
       "type": "boolean",
       "description": "A red LED",
-      "href": "/properties/led"
+      "href": "/properties/led",
+      "owned": "own led"
     }
   }
 }
@@ -821,21 +834,24 @@ mod tests {
                 properties: Properties {
                     temperature: Property {
                         ty: Type::Number,
-                        unit: Some("celcius"),
+                        unit: Some("celsius"),
                         description: Some("An ambient temperature sensor"),
                         href: "/properties/temperature",
+                        owned: "own temperature".to_string(),
                     },
                     humidity: Property {
                         ty: Type::Number,
                         unit: Some("percent"),
                         description: None,
                         href: "/properties/humidity",
+                        owned: "own humidity".to_string(),
                     },
                     led: Property {
                         ty: Type::Boolean,
                         unit: None,
                         description: Some("A red LED"),
                         href: "/properties/led",
+                        owned: "own led".to_string(),
                     },
                 },
                 ty: Type::Thing,
