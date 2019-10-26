@@ -10,6 +10,7 @@ name = "serde-json-wasm"
 readme = "README.md"
 repository = "https://github.com/confio/serde-json-wasm"
 version = "0.1.0"
+exclude = ["ci/*", ".gitignore", ".cargo", ".travis.yml"]
 
 [dependencies]
 serde = {version = "^1.0.80", default-features = false, features = ["alloc"] }
