@@ -54,17 +54,17 @@ impl<'de, 'a> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de> {
     }
 }
 
-pub(crate) struct VariantAccess<'a, 'b> {
+pub(crate) struct StructVariantAccess<'a, 'b> {
     de: &'a mut Deserializer<'b>,
 }
 
-impl<'a, 'b> VariantAccess<'a, 'b> {
+impl<'a, 'b> StructVariantAccess<'a, 'b> {
     pub fn new(de: &'a mut Deserializer<'b>) -> Self {
-        VariantAccess { de: de }
+        StructVariantAccess { de: de }
     }
 }
 
-impl<'a, 'de> de::EnumAccess<'de> for VariantAccess<'a, 'de> {
+impl<'a, 'de> de::EnumAccess<'de> for StructVariantAccess<'a, 'de> {
     type Error = Error;
     type Variant = Self;
 
@@ -78,34 +78,39 @@ impl<'a, 'de> de::EnumAccess<'de> for VariantAccess<'a, 'de> {
     }
 }
 
-impl<'a, 'de> de::VariantAccess<'de> for VariantAccess<'a, 'de> {
+impl<'a, 'de> de::VariantAccess<'de> for StructVariantAccess<'a, 'de> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
-//        Err(Error::Custom("unit_variant".to_string()))
-        unreachable!();
+        Err(Error::InvalidType)
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
         where
             T: de::DeserializeSeed<'de>,
     {
-        seed.deserialize(self.de)
+        let value = seed.deserialize(&mut *self.de)?;
+        // we remove trailing '}' to be consistent with struct_variant algorithm
+        match self.de.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+            b'}' => {
+                self.de.eat_char();
+                Ok(value)
+            },
+            _ => Err(Error::ExpectedSomeValue),
+        }
     }
 
     fn tuple_variant<V>(self, _len: usize, _visitor: V) -> Result<V::Value>
         where
             V: de::Visitor<'de>,
     {
-//        Err(Error::Custom("tuple_variant".to_string()))
-        unreachable!();
+        Err(Error::InvalidType)
     }
 
-    fn struct_variant<V>(self, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value>
+    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
         where
             V: de::Visitor<'de>,
     {
-//        Err(Error::Custom("TODO: implement struct_variant".to_string()))
-        unreachable!();
+        de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }
 }

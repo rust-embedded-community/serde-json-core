@@ -4,7 +4,7 @@ use std::{error, fmt, str::from_utf8};
 
 use serde::de::{self, Visitor};
 
-use self::enum_::{UnitVariantAccess, VariantAccess};
+use self::enum_::{StructVariantAccess, UnitVariantAccess};
 use self::map::MapAccess;
 use self::seq::SeqAccess;
 
@@ -610,14 +610,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             // if it is a struct enum
             b'{' => {
                 self.eat_char();
-                let value = visitor.visit_enum(VariantAccess::new(self))?;
-                match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
-                    b'}' => {
-                        self.eat_char();
-                        Ok(value)
-                    },
-                    _ => Err(Error::ExpectedSomeValue),
-                }
+                visitor.visit_enum(StructVariantAccess::new(self))
             },
             _ => Err(Error::ExpectedSomeIdent),
         }
