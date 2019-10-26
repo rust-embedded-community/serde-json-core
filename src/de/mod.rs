@@ -4,7 +4,7 @@ use std::{error, fmt, str::from_utf8};
 
 use serde::de::{self, Visitor};
 
-use self::enum_::UnitVariantAccess;
+use self::enum_::{StructVariantAccess, UnitVariantAccess};
 use self::map::MapAccess;
 use self::seq::SeqAccess;
 
@@ -82,8 +82,8 @@ impl error::Error for Error {
 
 impl de::Error for Error {
     fn custom<T>(msg: T) -> Self
-        where
-            T: fmt::Display,
+    where
+        T: fmt::Display,
     {
         Error::Custom(msg.to_string())
     }
@@ -608,8 +608,11 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             // if it is a string enum
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
             // if it is a struct enum
-            b'{' => Err(Error::Custom("TODO: parse enum struct".to_string())),
-            _ => Err(Error::ExpectedSomeValue),
+            b'{' => {
+                self.eat_char();
+                visitor.visit_enum(StructVariantAccess::new(self))
+            }
+            _ => Err(Error::ExpectedSomeIdent),
         }
     }
 
@@ -813,10 +816,13 @@ mod tests {
 
         // wrong number of args
         match crate::from_str::<Xy>(r#"[10]"#) {
-            Err(super::Error::Custom(_)) => {},
+            Err(super::Error::Custom(_)) => {}
             _ => panic!("expect custom error"),
         }
-        assert_eq!(crate::from_str::<Xy>(r#"[10, 20, 30]"#), Err(crate::de::Error::TrailingCharacters));
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10, 20, 30]"#),
+            Err(crate::de::Error::TrailingCharacters)
+        );
     }
 
     #[test]
@@ -844,7 +850,9 @@ mod tests {
         );
 
         assert_eq!(
-            crate::from_str(r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#),
+            crate::from_str(
+                r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#
+            ),
             Ok(Temperature { temperature: 20 })
         );
 
@@ -877,8 +885,7 @@ mod tests {
             pub messages: Vec<Msg>,
         }
 
-        #[derive(Debug, Deserialize, PartialEq)]
-        #[derive(serde_derive::Serialize)]
+        #[derive(Debug, Deserialize, PartialEq, serde_derive::Serialize)]
         pub struct Msg {
             pub name: String,
         }
@@ -888,29 +895,58 @@ mod tests {
             pub name: Option<String>,
         }
 
-        let m: Msg = crate::from_str(r#"{
+        let m: Msg = crate::from_str(
+            r#"{
           "name": "one"
-        }"#).expect("simple");
-        assert_eq!(m, Msg{name: "one".to_string()});
+        }"#,
+        )
+        .expect("simple");
+        assert_eq!(
+            m,
+            Msg {
+                name: "one".to_string()
+            }
+        );
 
-        let o: OptIn = crate::from_str(r#"{
+        let o: OptIn = crate::from_str(
+            r#"{
           "name": "two"
-        }"#).expect("opt");
-        assert_eq!(o, OptIn{name: Some("two".to_string())});
+        }"#,
+        )
+        .expect("opt");
+        assert_eq!(
+            o,
+            OptIn {
+                name: Some("two".to_string())
+            }
+        );
 
-        let res: Response = crate::from_str(r#"{
+        let res: Response = crate::from_str(
+            r#"{
           "log": "my log",
           "messages": [{"name": "one"}]
-        }"#).expect("fud");
-        assert_eq!(res, Response{
-            log: Some("my log".to_string()),
-            messages: vec![Msg{name: "one".to_string()}],
-        });
+        }"#,
+        )
+        .expect("fud");
+        assert_eq!(
+            res,
+            Response {
+                log: Some("my log".to_string()),
+                messages: vec![Msg {
+                    name: "one".to_string()
+                }],
+            }
+        );
 
         let res: Response = crate::from_str(r#"{"log": null,"messages": []}"#).expect("fud");
-        assert_eq!(res, Response{log: None, messages: Vec::new()});
+        assert_eq!(
+            res,
+            Response {
+                log: None,
+                messages: Vec::new()
+            }
+        );
     }
-
 
     #[test]
     fn deserialize_embedded_enum() {
@@ -933,31 +969,62 @@ mod tests {
             pub amount: Option<String>,
         }
 
-        let res: MyResult = crate::from_str(r#"{
+        let res: MyResult = crate::from_str(
+            r#"{
           "ok": {
+            "log": "hello",
             "messages": [{
                 "name": "fred",
                 "amount": "15"
-            }],
+            }]
           }
-        }"#).expect("goo");
-        assert_eq!(res, MyResult::Ok(Response{log: Some("hello".to_string()), messages: vec![Msg{name: "fred".to_string(), amount: Some("15".to_string())}]}));
+        }"#,
+        )
+        .expect("goo");
+        assert_eq!(
+            res,
+            MyResult::Ok(Response {
+                log: Some("hello".to_string()),
+                messages: vec![Msg {
+                    name: "fred".to_string(),
+                    amount: Some("15".to_string())
+                }]
+            })
+        );
 
-        let res: MyResult= crate::from_str(r#"{
+        let res: MyResult = crate::from_str(
+            r#"{
           "ok": {
             "log": "hello",
-            "messages": [],
+            "messages": []
           }
-        }"#).expect("goo");
-        assert_eq!(res, MyResult::Ok(Response{log: Some("hello".to_string()), messages: Vec::new()}));
+        }"#,
+        )
+        .expect("goo");
+        assert_eq!(
+            res,
+            MyResult::Ok(Response {
+                log: Some("hello".to_string()),
+                messages: Vec::new()
+            })
+        );
 
-        let res: MyResult = crate::from_str(r#"{
+        let res: MyResult = crate::from_str(
+            r#"{
           "ok": {
             "log": null,
-            "messages": [],
+            "messages": []
           }
-        }"#).expect("goo");
-        assert_eq!(res, MyResult::Ok(Response{log: None, messages: Vec::new()}));
+        }"#,
+        )
+        .expect("goo");
+        assert_eq!(
+            res,
+            MyResult::Ok(Response {
+                log: None,
+                messages: Vec::new()
+            })
+        );
     }
 
     // See https://iot.mozilla.org/wot/#thing-resource
