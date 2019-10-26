@@ -4,7 +4,7 @@ use std::{error, fmt, str::from_utf8};
 
 use serde::de::{self, Visitor};
 
-use self::enum_::UnitVariantAccess;
+use self::enum_::{UnitVariantAccess, VariantAccess};
 use self::map::MapAccess;
 use self::seq::SeqAccess;
 
@@ -608,8 +608,18 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             // if it is a string enum
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
             // if it is a struct enum
-            b'{' => Err(Error::Custom("TODO: parse enum struct".to_string())),
-            _ => Err(Error::ExpectedSomeValue),
+            b'{' => {
+                self.eat_char();
+                let value = visitor.visit_enum(VariantAccess::new(self))?;
+                match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+                    b'}' => {
+                        self.eat_char();
+                        Ok(value)
+                    },
+                    _ => Err(Error::ExpectedSomeValue),
+                }
+            },
+            _ => Err(Error::ExpectedSomeIdent),
         }
     }
 
@@ -935,10 +945,11 @@ mod tests {
 
         let res: MyResult = crate::from_str(r#"{
           "ok": {
+            "log": "hello",
             "messages": [{
                 "name": "fred",
                 "amount": "15"
-            }],
+            }]
           }
         }"#).expect("goo");
         assert_eq!(res, MyResult::Ok(Response{log: Some("hello".to_string()), messages: vec![Msg{name: "fred".to_string(), amount: Some("15".to_string())}]}));
@@ -946,7 +957,7 @@ mod tests {
         let res: MyResult= crate::from_str(r#"{
           "ok": {
             "log": "hello",
-            "messages": [],
+            "messages": []
           }
         }"#).expect("goo");
         assert_eq!(res, MyResult::Ok(Response{log: Some("hello".to_string()), messages: Vec::new()}));
@@ -954,7 +965,7 @@ mod tests {
         let res: MyResult = crate::from_str(r#"{
           "ok": {
             "log": null,
-            "messages": [],
+            "messages": []
           }
         }"#).expect("goo");
         assert_eq!(res, MyResult::Ok(Response{log: None, messages: Vec::new()}));
