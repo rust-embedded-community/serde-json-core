@@ -63,6 +63,9 @@ pub enum Error {
     /// JSON has a comma after the last value in an array or map.
     TrailingComma,
 
+    /// Custom error message from serde
+    Custom(String),
+
     #[doc(hidden)]
     __Extensible,
 }
@@ -74,6 +77,15 @@ impl error::Error for Error {
 
     fn description(&self) -> &str {
         "(use display)"
+    }
+}
+
+impl de::Error for Error {
+    fn custom<T>(msg: T) -> Self
+        where
+            T: fmt::Display,
+    {
+        Error::Custom(msg.to_string())
     }
 }
 
@@ -113,6 +125,7 @@ impl fmt::Display for Error {
                      value."
                 }
                 Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
+                Error::Custom(msg) => &msg,
                 _ => "Invalid JSON",
             }
         )
@@ -599,16 +612,6 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        unreachable!()
-    }
-}
-
-impl de::Error for Error {
-    fn custom<T>(_msg: T) -> Self
-    where
-        T: fmt::Display,
-    {
-        // TODO
         unreachable!()
     }
 }
