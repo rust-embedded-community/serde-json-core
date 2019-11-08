@@ -69,12 +69,13 @@ where
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
     ($self:ident, $N:expr, $v:expr) => {{
-        let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
+        let mut buf: [mem::MaybeUninit<u8>; $N] =
+            unsafe { mem::MaybeUninit::uninit().assume_init() };
 
         let mut v = $v;
         let mut i = $N - 1;
         loop {
-            buf[i] = (v % 10) as u8 + b'0';
+            buf[i] = mem::MaybeUninit::new((v % 10) as u8 + b'0');
             v /= 10;
 
             if v == 0 {
@@ -84,7 +85,9 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self
+            .buf
+            .extend_from_slice(unsafe { mem::transmute::<_, &[u8]>(&buf[i..]) })?;
         Ok(())
     }};
 }
@@ -100,10 +103,11 @@ macro_rules! serialize_signed {
             (false, v as $uxx)
         };
 
-        let mut buf: [u8; $N] = unsafe { mem::uninitialized() };
+        let mut buf: [mem::MaybeUninit<u8>; $N] =
+            unsafe { mem::MaybeUninit::uninit().assume_init() };
         let mut i = $N - 1;
         loop {
-            buf[i] = (v % 10) as u8 + b'0';
+            buf[i] = mem::MaybeUninit::new((v % 10) as u8 + b'0');
             v /= 10;
 
             i -= 1;
@@ -114,11 +118,13 @@ macro_rules! serialize_signed {
         }
 
         if signed {
-            buf[i] = b'-';
+            buf[i] = mem::MaybeUninit::new(b'-');
         } else {
             i += 1;
         }
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self
+            .buf
+            .extend_from_slice(unsafe { mem::transmute::<_, &[u8]>(&buf[i..]) })?;
         Ok(())
     }};
 }
