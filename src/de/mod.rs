@@ -878,8 +878,14 @@ mod tests {
         assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
 
         // wrong number of args
-        assert_eq!(crate::from_str::<Xy>(r#"[10]"#), Err(crate::de::Error::CustomError));
-        assert_eq!(crate::from_str::<Xy>(r#"[10, 20, 30]"#), Err(crate::de::Error::TrailingCharacters));
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10]"#),
+            Err(crate::de::Error::CustomError)
+        );
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10, 20, 30]"#),
+            Err(crate::de::Error::TrailingCharacters)
+        );
     }
 
     #[test]
@@ -907,7 +913,9 @@ mod tests {
         );
 
         assert_eq!(
-            crate::from_str(r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#),
+            crate::from_str(
+                r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#
+            ),
             Ok(Temperature { temperature: 20 })
         );
 
