@@ -1,10 +1,10 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::fmt;
+use core::{fmt, fmt::Write};
 
 use serde::ser;
 
-use heapless::{String, Vec};
+use heapless::{consts::*, String, Vec};
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -123,6 +123,15 @@ macro_rules! serialize_signed {
     }};
 }
 
+macro_rules! serialize_fmt {
+    ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
+        let mut s: String<$uxx> = String::new();
+        write!(&mut s, $fmt, $v).unwrap();
+        $self.buf.extend_from_slice(s.as_bytes())?;
+        Ok(())
+    }};
+}
+
 impl<'a, B> ser::Serializer for &'a mut Serializer<B>
 where
     B: heapless::ArrayLength<u8>,
@@ -187,12 +196,12 @@ where
         serialize_unsigned!(self, 20, v)
     }
 
-    fn serialize_f32(self, _v: f32) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
+        serialize_fmt!(self, U16, "{:e}", v)
     }
 
-    fn serialize_f64(self, _v: f64) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
+        serialize_fmt!(self, U32, "{:e}", v)
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {
@@ -499,6 +508,35 @@ mod tests {
         assert_eq!(
             &*crate::to_string::<N, _>(&Temperature { temperature: -128 }).unwrap(),
             r#"{"temperature":-128}"#
+        );
+    }
+
+    #[test]
+    fn struct_f32() {
+        #[derive(Serialize)]
+        struct Temperature {
+            temperature: f32,
+        }
+
+        assert_eq!(
+            &*crate::to_string::<N, _>(&Temperature { temperature: -20. }).unwrap(),
+            r#"{"temperature":-2e1}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<N, _>(&Temperature {
+                temperature: -20345.
+            })
+            .unwrap(),
+            r#"{"temperature":-2.0345e4}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<N, _>(&Temperature {
+                temperature: -2.3456789012345e-23
+            })
+            .unwrap(),
+            r#"{"temperature":-2.3456788e-23}"#
         );
     }
 

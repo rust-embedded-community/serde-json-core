@@ -1,5 +1,6 @@
 //! Deserialize JSON data to a Rust data structure
 
+use core::str::FromStr;
 use core::{fmt, str};
 
 use serde::de::{self, Visitor};
@@ -26,6 +27,9 @@ pub enum Error {
 
     /// EOF while parsing a string.
     EofWhileParsingString,
+
+    /// EOF while parsing a JSON number.
+    EofWhileParsingNumber,
 
     /// EOF while parsing a JSON value.
     EofWhileParsingValue,
@@ -273,6 +277,29 @@ macro_rules! deserialize_signed {
     }};
 }
 
+macro_rules! deserialize_fromstr {
+    ($self:ident, $visitor:ident, $typ:ident, $visit_fn:ident, $pattern:expr) => {{
+        let start = $self.index;
+        loop {
+            match $self.peek() {
+                Some(c) => {
+                    if $pattern.iter().find(|&&d| d == c).is_some() {
+                        $self.eat_char();
+                    } else {
+                        let s = unsafe {
+                            // already checked that it contains only ascii
+                            str::from_utf8_unchecked(&$self.slice[start..$self.index])
+                        };
+                        let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
+                        return $visitor.$visit_fn(v);
+                    }
+                }
+                None => return Err(Error::EofWhileParsingNumber),
+            }
+        }
+    }};
+}
+
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
@@ -360,18 +387,20 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         deserialize_unsigned!(self, visitor, u64, visit_u64)
     }
 
-    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        deserialize_fromstr!(self, visitor, f32, visit_f32, b"0123456789+-.eE")
     }
 
-    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        deserialize_fromstr!(self, visitor, f64, visit_f64, b"0123456789+-.eE")
     }
 
     fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
@@ -709,6 +738,51 @@ mod tests {
         // out of range
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 128 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -129 }"#).is_err());
+    }
+
+    #[test]
+    fn struct_f32() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Temperature {
+            temperature: f32,
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -17.2 }"#),
+            Ok(Temperature { temperature: -17.2 })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -0.0 }"#),
+            Ok(Temperature { temperature: -0. })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -2.1e-3 }"#),
+            Ok(Temperature {
+                temperature: -2.1e-3
+            })
+        );
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -3 }"#),
+            Ok(Temperature { temperature: -3. })
+        );
+
+        use core::f32;
+
+        assert_eq!(
+            crate::from_str(r#"{ "temperature": -1e500 }"#),
+            Ok(Temperature {
+                temperature: f32::NEG_INFINITY
+            })
+        );
+
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": -2-2 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1 1 }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": 0.0. }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": ä }"#).is_err());
     }
 
     #[test]
