@@ -9,10 +9,10 @@ license = "MIT OR Apache-2.0"
 name = "serde-json-core"
 readme = "README.md"
 repository = "https://japaric.github.io/serde-json-core/serde_json_core"
-version = "0.0.1"
+version = "0.1.0"
 
 [dependencies]
-heapless = "0.4.0"
+heapless = "0.5.0"
 
 [dependencies.serde]
 default-features = false
@@ -23,3 +23,6 @@ serde_derive = "1.0.80"
 
 [features]
 std = ["serde/std"]
+
+[badges]
+maintenance = { status = "looking-for-maintainer" }
