@@ -4,7 +4,7 @@ use core::{fmt, fmt::Write};
 
 use serde::ser;
 
-use heapless::{String, Vec, consts::*};
+use heapless::{consts::*, String, Vec};
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -524,17 +524,21 @@ mod tests {
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: -20345. }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature {
+                temperature: -20345.
+            })
+            .unwrap(),
             r#"{"temperature":-2.0345e4}"#
         );
 
         assert_eq!(
-            &*crate::to_string::<N, _>(&Temperature { temperature: -2.3456789012345e-23 }).unwrap(),
+            &*crate::to_string::<N, _>(&Temperature {
+                temperature: -2.3456789012345e-23
+            })
+            .unwrap(),
             r#"{"temperature":-2.3456788e-23}"#
         );
-
     }
-
 
     #[test]
     fn struct_option() {

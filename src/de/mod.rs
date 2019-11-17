@@ -1,7 +1,7 @@
 //! Deserialize JSON data to a Rust data structure
 
-use core::{fmt, str};
 use core::str::FromStr;
+use core::{fmt, str};
 
 use serde::de::{self, Visitor};
 
@@ -286,13 +286,14 @@ macro_rules! deserialize_fromstr {
                     if $pattern.iter().find(|&&d| d == c).is_some() {
                         $self.eat_char();
                     } else {
-                        let s = unsafe {  // already checked that it contains only ascii
+                        let s = unsafe {
+                            // already checked that it contains only ascii
                             str::from_utf8_unchecked(&$self.slice[start..$self.index])
                         };
                         let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
                         return $visitor.$visit_fn(v);
                     }
-                },
+                }
                 None => return Err(Error::EofWhileParsingNumber),
             }
         }
@@ -758,7 +759,9 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -2.1e-3 }"#),
-            Ok(Temperature { temperature: -2.1e-3 })
+            Ok(Temperature {
+                temperature: -2.1e-3
+            })
         );
 
         assert_eq!(
@@ -770,7 +773,9 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -1e500 }"#),
-            Ok(Temperature { temperature: f32::NEG_INFINITY })
+            Ok(Temperature {
+                temperature: f32::NEG_INFINITY
+            })
         );
 
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
