@@ -5,6 +5,15 @@
 //! This version of [`serde-json`] is aimed at applications that run on resource constrained
 //! devices.
 //!
+//! # Status
+//!
+//! This crate is currently being passively maintained by [@japaric]. I (@japaric) will be merging
+//! PRs (bug fixes and features) as they appear without any long-term / design consideration. If you
+//! would like to take over the steering wheel (i.e. take ownership of this crate) send me an e-mail
+//! (see my GitHub profile).
+//!
+//! [@japaric]: https://github.com/japaric
+//!
 //! # Current features
 //!
 //! - The error type is a simple C like enum (less overhead, smaller memory footprint)
@@ -66,3 +75,8 @@ pub mod ser;
 pub use self::de::{from_slice, from_str};
 #[doc(inline)]
 pub use self::ser::{to_string, to_vec};
+
+#[allow(deprecated)]
+unsafe fn uninitialized<T>() -> T {
+    core::mem::uninitialized()
+}
