@@ -68,7 +68,7 @@ pub enum Error {
     TrailingComma,
 
     /// Error with a custom message that we had to discard.
-    CustomError,
+    CustomError(heapless::String<heapless::consts::U64>),
 
     #[doc(hidden)]
     __Extensible,
@@ -611,17 +611,17 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 }
 
 impl de::Error for Error {
-    // We can’t alloc a String to save the msg in, so we have this less-than-useful
-    // error as better than panicking with unreachable!. These errors can arise from
-    // derive, such as "not enough elements in a tuple" and "missing required field".
-    //
-    // TODO: consider using a heapless::String to save the first n characters of this
-    // message.
-    fn custom<T>(_msg: T) -> Self
+    fn custom<T>(msg: T) -> Self
     where
         T: fmt::Display,
     {
-        Error::CustomError
+        use core::fmt::Write;
+
+        let mut string = heapless::String::new();
+        // Intentionally discard the result here, which ignores overflow and lets us keep the first
+        // N error message characters
+        let _ = write!(string, "{}", msg);
+        Error::CustomError(string)
     }
 }
 
@@ -661,7 +661,7 @@ impl fmt::Display for Error {
                      value."
                 }
                 Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
-                Error::CustomError => "JSON does not match deserializer’s expected format.",
+                Error::CustomError(msg) => msg.as_str(),
                 _ => "Invalid JSON",
             }
         )
@@ -880,7 +880,9 @@ mod tests {
         // wrong number of args
         assert_eq!(
             crate::from_str::<Xy>(r#"[10]"#),
-            Err(crate::de::Error::CustomError)
+            Err(crate::de::Error::CustomError(
+                "invalid length 1, expected tuple struct Xy with 2 elements".into()
+            ))
         );
         assert_eq!(
             crate::from_str::<Xy>(r#"[10, 20, 30]"#),
