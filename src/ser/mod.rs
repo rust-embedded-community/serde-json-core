@@ -6,9 +6,11 @@ use serde::ser;
 
 use heapless::{consts::*, String, Vec};
 
+use self::map::SerializeMap;
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
 
+mod map;
 mod seq;
 mod struct_;
 
@@ -142,7 +144,7 @@ where
     type SerializeTuple = SerializeSeq<'a, B>;
     type SerializeTupleStruct = Unreachable;
     type SerializeTupleVariant = Unreachable;
-    type SerializeMap = Unreachable;
+    type SerializeMap = SerializeMap<'a, B>;
     type SerializeStruct = SerializeStruct<'a, B>;
     type SerializeStructVariant = Unreachable;
 
@@ -301,7 +303,9 @@ where
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        unreachable!()
+        self.buf.push(b'{')?;
+
+        Ok(SerializeMap::new(self))
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
