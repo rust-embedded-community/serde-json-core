@@ -981,9 +981,7 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("something bad happened"),
-            crate::de::Error::CustomErrorWithMessage(
-                "something bad happened".into()
-            )
+            crate::de::Error::CustomErrorWithMessage("something bad happened".into())
         );
     }
 
