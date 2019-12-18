@@ -10,6 +10,7 @@ main() {
 
     if [ $TARGET = x86_64-unknown-linux-gnu ]; then
         cargo test --target $TARGET
+        cargo test --features custom-error-messages --target $TARGET
 
         return
     fi
