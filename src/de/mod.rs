@@ -627,10 +627,9 @@ impl de::Error for Error {
         #[cfg(feature = "custom-error-messages")]
         {
             use core::fmt::Write;
+
             let mut string = heapless::String::new();
-            // Intentionally discard the result here, which ignores overflow and lets us keep the first
-            // N error message characters
-            let _ = write!(string, "{}", msg);
+            write!(string, "{:.64}", msg).unwrap();
             Error::CustomErrorWithMessage(string)
         }
     }
@@ -973,6 +972,30 @@ mod tests {
         assert_eq!(
             crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": ] }"#),
             Err(crate::de::Error::ExpectedSomeValue)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "custom-error-messages")]
+    fn preserve_short_error_message() {
+        use serde::de::Error;
+        assert_eq!(
+            crate::de::Error::custom("something bad happened"),
+            crate::de::Error::CustomErrorWithMessage(
+                "something bad happened".into()
+            )
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "custom-error-messages")]
+    fn truncate_error_message() {
+        use serde::de::Error;
+        assert_eq!(
+            crate::de::Error::custom("0123456789012345678901234567890123456789012345678901234567890123 <- after here the message should be truncated"),
+            crate::de::Error::CustomErrorWithMessage(
+                "0123456789012345678901234567890123456789012345678901234567890123".into()
+            )
         );
     }
 
