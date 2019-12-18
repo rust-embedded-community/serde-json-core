@@ -68,7 +68,11 @@ pub enum Error {
     TrailingComma,
 
     /// Error with a custom message that we had to discard.
-    CustomError(heapless::String<heapless::consts::U64>),
+    CustomError,
+
+    /// Error with a custom message that was preserved.
+    #[cfg(feature = "custom-error-messages")]
+    CustomErrorWithMessage(heapless::String<heapless::consts::U64>),
 
     #[doc(hidden)]
     __Extensible,
@@ -611,17 +615,24 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 }
 
 impl de::Error for Error {
+    #[cfg_attr(not(feature = "custom-error-messages"), allow(unused_variables))]
     fn custom<T>(msg: T) -> Self
     where
         T: fmt::Display,
     {
-        use core::fmt::Write;
-
-        let mut string = heapless::String::new();
-        // Intentionally discard the result here, which ignores overflow and lets us keep the first
-        // N error message characters
-        let _ = write!(string, "{}", msg);
-        Error::CustomError(string)
+        #[cfg(not(feature = "custom-error-messages"))]
+        {
+            Error::CustomError
+        }
+        #[cfg(feature = "custom-error-messages")]
+        {
+            use core::fmt::Write;
+            let mut string = heapless::String::new();
+            // Intentionally discard the result here, which ignores overflow and lets us keep the first
+            // N error message characters
+            let _ = write!(string, "{}", msg);
+            Error::CustomErrorWithMessage(string)
+        }
     }
 }
 
@@ -661,7 +672,9 @@ impl fmt::Display for Error {
                      value."
                 }
                 Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
-                Error::CustomError(msg) => msg.as_str(),
+                Error::CustomError => "JSON does not match deserializer’s expected format.",
+                #[cfg(feature = "custom-error-messages")]
+                Error::CustomErrorWithMessage(msg) => msg.as_str(),
                 _ => "Invalid JSON",
             }
         )
@@ -870,6 +883,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "custom-error-messages"))]
     fn struct_tuple() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Xy(i8, i8);
@@ -880,7 +894,27 @@ mod tests {
         // wrong number of args
         assert_eq!(
             crate::from_str::<Xy>(r#"[10]"#),
-            Err(crate::de::Error::CustomError(
+            Err(crate::de::Error::CustomError)
+        );
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10, 20, 30]"#),
+            Err(crate::de::Error::TrailingCharacters)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "custom-error-messages")]
+    fn struct_tuple() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Xy(i8, i8);
+
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+
+        // wrong number of args
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10]"#),
+            Err(crate::de::Error::CustomErrorWithMessage(
                 "invalid length 1, expected tuple struct Xy with 2 elements".into()
             ))
         );
