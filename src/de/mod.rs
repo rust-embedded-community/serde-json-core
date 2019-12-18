@@ -70,6 +70,10 @@ pub enum Error {
     /// Error with a custom message that we had to discard.
     CustomError,
 
+    /// Error with a custom message that was preserved.
+    #[cfg(feature = "custom-error-messages")]
+    CustomErrorWithMessage(heapless::String<heapless::consts::U64>),
+
     #[doc(hidden)]
     __Extensible,
 }
@@ -608,17 +612,23 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 }
 
 impl de::Error for Error {
-    // We can’t alloc a String to save the msg in, so we have this less-than-useful
-    // error as better than panicking with unreachable!. These errors can arise from
-    // derive, such as "not enough elements in a tuple" and "missing required field".
-    //
-    // TODO: consider using a heapless::String to save the first n characters of this
-    // message.
-    fn custom<T>(_msg: T) -> Self
+    #[cfg_attr(not(feature = "custom-error-messages"), allow(unused_variables))]
+    fn custom<T>(msg: T) -> Self
     where
         T: fmt::Display,
     {
-        Error::CustomError
+        #[cfg(not(feature = "custom-error-messages"))]
+        {
+            Error::CustomError
+        }
+        #[cfg(feature = "custom-error-messages")]
+        {
+            use core::fmt::Write;
+
+            let mut string = heapless::String::new();
+            write!(string, "{:.64}", msg).unwrap();
+            Error::CustomErrorWithMessage(string)
+        }
     }
 }
 
@@ -659,6 +669,8 @@ impl fmt::Display for Error {
                 }
                 Error::TrailingComma => "JSON has a comma after the last value in an array or map.",
                 Error::CustomError => "JSON does not match deserializer’s expected format.",
+                #[cfg(feature = "custom-error-messages")]
+                Error::CustomErrorWithMessage(msg) => msg.as_str(),
                 _ => "Invalid JSON",
             }
         )
@@ -867,6 +879,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "custom-error-messages"))]
     fn struct_tuple() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Xy(i8, i8);
@@ -878,6 +891,28 @@ mod tests {
         assert_eq!(
             crate::from_str::<Xy>(r#"[10]"#),
             Err(crate::de::Error::CustomError)
+        );
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10, 20, 30]"#),
+            Err(crate::de::Error::TrailingCharacters)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "custom-error-messages")]
+    fn struct_tuple() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Xy(i8, i8);
+
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+
+        // wrong number of args
+        assert_eq!(
+            crate::from_str::<Xy>(r#"[10]"#),
+            Err(crate::de::Error::CustomErrorWithMessage(
+                "invalid length 1, expected tuple struct Xy with 2 elements".into()
+            ))
         );
         assert_eq!(
             crate::from_str::<Xy>(r#"[10, 20, 30]"#),
@@ -934,6 +969,28 @@ mod tests {
         assert_eq!(
             crate::from_str::<Temperature>(r#"{ "temperature": 20, "broken": ] }"#),
             Err(crate::de::Error::ExpectedSomeValue)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "custom-error-messages")]
+    fn preserve_short_error_message() {
+        use serde::de::Error;
+        assert_eq!(
+            crate::de::Error::custom("something bad happened"),
+            crate::de::Error::CustomErrorWithMessage("something bad happened".into())
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "custom-error-messages")]
+    fn truncate_error_message() {
+        use serde::de::Error;
+        assert_eq!(
+            crate::de::Error::custom("0123456789012345678901234567890123456789012345678901234567890123 <- after here the message should be truncated"),
+            crate::de::Error::CustomErrorWithMessage(
+                "0123456789012345678901234567890123456789012345678901234567890123".into()
+            )
         );
     }
 
