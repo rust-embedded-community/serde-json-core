@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","This type represents all possible errors that can occur when deserializing JSON data"]],"fn":[["from_slice","Deserializes an instance of type `T` from bytes of JSON text"],["from_str","Deserializes an instance of type T from a string of JSON text"]],"type":[["Result","Deserialization result"]]});

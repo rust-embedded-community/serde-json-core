@@ -1,0 +1,10 @@
+var ALIASES = {};
+ALIASES["as_slice"] = {};
+ALIASES["byteorder"] = {};
+ALIASES["generic_array"] = {};
+ALIASES["hash32"] = {};
+ALIASES["heapless"] = {};
+ALIASES["serde"] = {};
+ALIASES["serde_json_core"] = {};
+ALIASES["stable_deref_trait"] = {};
+ALIASES["typenum"] = {};

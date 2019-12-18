@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","This type represents all possible errors that can occur when serializing JSON data"]],"fn":[["to_string","Serializes the given data structure as a string of JSON text"],["to_vec","Serializes the given data structure as a JSON byte vector"]],"type":[["Result","Serialization result"]]});
