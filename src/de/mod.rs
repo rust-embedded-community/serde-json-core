@@ -99,10 +99,10 @@ impl<'a> Deserializer<'a> {
         self.index += 1;
     }
 
-    fn end(&mut self) -> Result<()> {
+    fn end(&mut self) -> Result<usize> {
         match self.parse_whitespace() {
             Some(_) => Err(Error::TrailingCharacters),
-            None => Ok(()),
+            None => Ok(self.index),
         }
     }
 
@@ -678,19 +678,20 @@ impl fmt::Display for Error {
 }
 
 /// Deserializes an instance of type `T` from bytes of JSON text
-pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<T>
+/// Returns the value and the number of bytes consumed in the process
+pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
     let mut de = Deserializer::new(v);
     let value = de::Deserialize::deserialize(&mut de)?;
-    de.end()?;
+    let length = de.end()?;
 
-    Ok(value)
+    Ok((value, length))
 }
 
 /// Deserializes an instance of type T from a string of JSON text
-pub fn from_str<'a, T>(s: &'a str) -> Result<T>
+pub fn from_str<'a, T>(s: &'a str) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
