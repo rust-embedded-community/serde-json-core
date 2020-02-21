@@ -3,12 +3,13 @@
 use core::{fmt, fmt::Write};
 
 use serde::ser;
+use serde::ser::SerializeStruct as _;
 
 use heapless::{consts::*, String, Vec};
 
 use self::map::SerializeMap;
 use self::seq::SerializeSeq;
-use self::struct_::SerializeStruct;
+use self::struct_::{SerializeStruct, SerializeStructVariant};
 
 mod map;
 mod seq;
@@ -146,7 +147,7 @@ where
     type SerializeTupleVariant = Unreachable;
     type SerializeMap = SerializeMap<'a, B>;
     type SerializeStruct = SerializeStruct<'a, B>;
-    type SerializeStructVariant = Unreachable;
+    type SerializeStructVariant = SerializeStructVariant<'a, B>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
@@ -234,11 +235,11 @@ where
     }
 
     fn serialize_unit(self) -> Result<Self::Ok> {
-        unreachable!()
+        self.serialize_none()
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok> {
-        unreachable!()
+        self.serialize_unit()
     }
 
     fn serialize_unit_variant(
@@ -253,25 +254,29 @@ where
     fn serialize_newtype_struct<T: ?Sized>(
         self,
         _name: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        unreachable!()
+        value.serialize(self)
     }
 
     fn serialize_newtype_variant<T: ?Sized>(
-        self,
+        mut self,
         _name: &'static str,
         _variant_index: u32,
-        _variant: &'static str,
-        _value: &T,
+        variant: &'static str,
+        value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        unreachable!()
+        self.buf.push(b'{')?;
+        let mut s = SerializeStruct::new(&mut self);
+        s.serialize_field(variant, value)?;
+        s.end()?;
+        Ok(())
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
@@ -321,7 +326,9 @@ where
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        unreachable!()
+        self.buf.push(b'{')?;
+
+        Ok(SerializeStructVariant::new(self))
     }
 
     fn collect_str<T: ?Sized>(self, _value: &T) -> Result<Self::Ok>
@@ -596,5 +603,41 @@ mod tests {
             &*crate::to_string::<N, _>(&Tuple { a: true, b: false }).unwrap(),
             r#"{"a":true,"b":false}"#
         );
+    }
+
+    #[test]
+    fn test_unit() {
+        let a = ();
+        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"null"#);
+    }
+
+    #[test]
+    fn test_newtype_struct() {
+        #[derive(Serialize)]
+        struct A(pub u32);
+        let a = A(54);
+        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"54"#);
+    }
+
+    #[test]
+    fn test_newtype_variant() {
+        #[derive(Serialize)]
+        enum A {
+            A(u32),
+        }
+        let a = A::A(54);
+        
+        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"{"A":54}"#);
+    }
+
+    #[test]
+    fn test_struct_variant() {
+        #[derive(Serialize)]
+        enum A {
+            A { x: u32, y: u16 },
+        }
+        let a = A::A { x: 54, y: 720 };
+        
+        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"{"x":54,"y":720}"#);
     }
 }

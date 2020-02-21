@@ -471,28 +471,40 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    /// Unsupported. Use a more specific deserialize_* method
-    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        let peek = match self.parse_whitespace() {
+            Some(b) => b,
+            None => {
+                return Err(Error::EofWhileParsingValue);
+            }
+        };
+
+        match peek {
+            b'n' => {
+                self.eat_char();
+                self.parse_ident(b"ull")?;
+                visitor.visit_unit()
+            }
+            _ => Err(Error::InvalidType),
+        }
     }
 
-    /// Unsupported. Use a more specific deserialize_* method
-    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_unit(visitor)
     }
 
     /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
@@ -876,6 +888,14 @@ mod tests {
         // out of range
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 256 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
+    }
+
+    #[test]
+    fn newtype_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct A(pub u32);
+        
+        assert_eq!(crate::from_str::<A>(r#"54"#).unwrap(), A(54));
     }
 
     #[test]
