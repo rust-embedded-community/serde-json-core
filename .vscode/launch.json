@@ -11,6 +11,7 @@
             "cargo": {
                 "args": [
                     "test",
+                    "--features=custom-error-messages",
                     "--no-run",
                     "--lib",
                     "--package=serde-json-core"

@@ -5,7 +5,7 @@ use core::{fmt, str};
 
 use serde::de::{self, Visitor};
 
-use self::enum_::UnitVariantAccess;
+use self::enum_::{UnitVariantAccess, VariantAccess};
 use self::map::MapAccess;
 use self::seq::SeqAccess;
 
@@ -585,6 +585,17 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
+            b'{' => {
+                self.eat_char();
+                let value = visitor.visit_enum(VariantAccess::new(self))?;
+                match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+                    b'}' => {
+                        self.eat_char();
+                        Ok(value)
+                    }
+                    _ => Err(Error::ExpectedSomeValue),
+                }
+            },
             _ => Err(Error::ExpectedSomeValue),
         }
     }
@@ -891,11 +902,38 @@ mod tests {
     }
 
     #[test]
+    fn test_unit() {
+        assert_eq!(crate::from_str::<()>(r#"null"#).unwrap(), ());
+    }
+
+    #[test]
     fn newtype_struct() {
         #[derive(Deserialize, Debug, PartialEq)]
         struct A(pub u32);
         
         assert_eq!(crate::from_str::<A>(r#"54"#).unwrap(), A(54));
+    }
+
+    #[test]
+    fn test_newtype_variant() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        enum A {
+            A(u32),
+        }
+        let a = A::A(54);
+        let x = crate::from_str::<A>(r#"{"A":54}"#);
+        assert_eq!(x, Ok(a));
+    }
+
+    #[test]
+    fn test_struct_variant() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        enum A {
+            A { x: u32, y: u16 },
+        }
+        let a = A::A { x: 54, y: 720 };
+        let x = crate::from_str::<A>(r#"{"A": {"x":54,"y":720 } }"#);
+        assert_eq!(x, Ok(a));
     }
 
     #[test]

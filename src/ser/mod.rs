@@ -421,22 +421,6 @@ impl ser::SerializeMap for Unreachable {
     }
 }
 
-impl ser::SerializeStructVariant for Unreachable {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, _value: &T) -> Result<()>
-    where
-        T: ser::Serialize,
-    {
-        unreachable!()
-    }
-
-    fn end(self) -> Result<Self::Ok> {
-        unreachable!()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use serde_derive::Serialize;
