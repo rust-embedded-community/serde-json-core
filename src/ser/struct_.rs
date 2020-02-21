@@ -97,7 +97,7 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        self.ser.buf.push(b'}')?;
+        self.ser.buf.extend_from_slice(b"}}")?;
         Ok(())
     }
 }

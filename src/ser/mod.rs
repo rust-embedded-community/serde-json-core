@@ -323,10 +323,12 @@ where
         self,
         _name: &'static str,
         _variant_index: u32,
-        _variant: &'static str,
+        variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        self.buf.push(b'{')?;
+        self.buf.extend_from_slice(b"{\"")?;
+        self.buf.extend_from_slice(variant.as_bytes())?;
+        self.buf.extend_from_slice(b"\":{")?;
 
         Ok(SerializeStructVariant::new(self))
     }
@@ -622,6 +624,6 @@ mod tests {
         }
         let a = A::A { x: 54, y: 720 };
         
-        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"{"x":54,"y":720}"#);
+        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"{"A":{"x":54,"y":720}}"#);
     }
 }
