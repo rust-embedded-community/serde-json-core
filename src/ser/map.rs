@@ -1,12 +1,10 @@
 use serde::ser;
 
-use heapless::ArrayLength;
-
-use crate::ser::{Error, Result, Serializer};
+use crate::{ser::slice::MutSlice, ser::{Error, Result, Serializer}};
 
 pub struct SerializeMap<'a, B>
 where
-    B: ArrayLength<u8>,
+    B: MutSlice,
 {
     ser: &'a mut Serializer<B>,
     first: bool,
@@ -14,7 +12,7 @@ where
 
 impl<'a, B> SerializeMap<'a, B>
 where
-    B: ArrayLength<u8>,
+    B: MutSlice,
 {
     pub(crate) fn new(ser: &'a mut Serializer<B>) -> Self {
         SerializeMap { ser, first: true }
@@ -23,7 +21,7 @@ where
 
 impl<'a, B> ser::SerializeMap for SerializeMap<'a, B>
 where
-    B: ArrayLength<u8>,
+    B: MutSlice,
 {
     type Ok = ();
     type Error = Error;
