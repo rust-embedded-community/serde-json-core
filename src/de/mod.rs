@@ -996,7 +996,6 @@ mod tests {
 
     // See https://iot.mozilla.org/wot/#thing-resource
     #[test]
-    #[ignore]
     fn wot() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Thing<'a> {
@@ -1056,7 +1055,7 @@ mod tests {
                 properties: Properties {
                     temperature: Property {
                         ty: Type::Number,
-                        unit: Some("celcius"),
+                        unit: Some("celsius"),
                         description: Some("An ambient temperature sensor"),
                         href: "/properties/temperature",
                     },
