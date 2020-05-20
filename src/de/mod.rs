@@ -499,7 +499,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match self.peek().ok_or(Error::EofWhileParsingValue)? {
+        match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'[' => {
                 self.eat_char();
                 let ret = visitor.visit_seq(SeqAccess::new(self))?;
