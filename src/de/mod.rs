@@ -511,7 +511,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match self.peek().ok_or(Error::EofWhileParsingValue)? {
+        match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'[' => {
                 self.eat_char();
                 let ret = visitor.visit_seq(SeqAccess::new(self))?;
@@ -1054,7 +1054,6 @@ mod tests {
 
     // See https://iot.mozilla.org/wot/#thing-resource
     #[test]
-    #[ignore]
     fn wot() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Thing<'a> {
@@ -1114,7 +1113,7 @@ mod tests {
                 properties: Properties {
                     temperature: Property {
                         ty: Type::Number,
-                        unit: Some("celcius"),
+                        unit: Some("celsius"),
                         description: Some("An ambient temperature sensor"),
                         href: "/properties/temperature",
                     },
