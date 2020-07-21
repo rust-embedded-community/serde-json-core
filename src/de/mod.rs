@@ -791,8 +791,14 @@ mod tests {
         // non-excaped " preceded by backslashes
         assert_eq!(crate::from_str(r#" "foo bar\\" "#), Ok(r#"foo bar\\"#));
         assert_eq!(crate::from_str(r#" "foo bar\\\\" "#), Ok(r#"foo bar\\\\"#));
-        assert_eq!(crate::from_str(r#" "foo bar\\\\\\" "#), Ok(r#"foo bar\\\\\\"#));
-        assert_eq!(crate::from_str(r#" "foo bar\\\\\\\\" "#), Ok(r#"foo bar\\\\\\\\"#));
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\\\" "#),
+            Ok(r#"foo bar\\\\\\"#)
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\\\\\" "#),
+            Ok(r#"foo bar\\\\\\\\"#)
+        );
         assert_eq!(crate::from_str(r#" "\\" "#), Ok(r#"\\"#));
     }
 
@@ -1078,28 +1084,28 @@ mod tests {
         assert_eq!(
             crate::from_str::<Thing<'_>>(
                 r#"
-{
-  "type": "thing",
-  "properties": {
-    "temperature": {
-      "type": "number",
-      "unit": "celsius",
-      "description": "An ambient temperature sensor",
-      "href": "/properties/temperature"
-    },
-    "humidity": {
-      "type": "number",
-      "unit": "percent",
-      "href": "/properties/humidity"
-    },
-    "led": {
-      "type": "boolean",
-      "description": "A red LED",
-      "href": "/properties/led"
-    }
-  }
-}
-"#
+                    {
+                    "type": "thing",
+                    "properties": {
+                        "temperature": {
+                        "type": "number",
+                        "unit": "celsius",
+                        "description": "An ambient temperature sensor",
+                        "href": "/properties/temperature"
+                        },
+                        "humidity": {
+                        "type": "number",
+                        "unit": "percent",
+                        "href": "/properties/humidity"
+                        },
+                        "led": {
+                        "type": "boolean",
+                        "description": "A red LED",
+                        "href": "/properties/led"
+                        }
+                    }
+                    }
+                    "#
             ),
             Ok(Thing {
                 properties: Properties {
