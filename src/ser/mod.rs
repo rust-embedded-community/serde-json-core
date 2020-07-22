@@ -22,8 +22,6 @@ pub type Result<T> = ::core::result::Result<T, Error>;
 pub enum Error {
     /// Buffer is full
     BufferFull,
-    /// Buffer is full
-    Test(usize),
     #[doc(hidden)]
     __Extensible,
 }
@@ -80,7 +78,7 @@ impl<'a> Serializer<'a> {
     fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
         if self.idx + other.len() > self.buf.len() {
             // won't fit in the buf; don't modify anything and return an error
-            Err(Error::Test(self.buf.len()))
+            Err(Error::BufferFull)
         } else {
             for c in other {
                 unsafe { self.push_unchecked(c.clone()) };
