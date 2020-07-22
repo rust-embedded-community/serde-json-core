@@ -22,6 +22,8 @@ pub type Result<T> = ::core::result::Result<T, Error>;
 pub enum Error {
     /// Buffer is full
     BufferFull,
+    /// Buffer is full
+    Test(usize),
     #[doc(hidden)]
     __Extensible,
 }
@@ -51,19 +53,40 @@ impl fmt::Display for Error {
     }
 }
 
-pub(crate) struct Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
-    buf: Vec<u8, B>,
+pub(crate) struct Serializer<'a> {
+    buf: &'a mut [u8],
+    idx: usize,
 }
 
-impl<B> Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
-    fn new() -> Self {
-        Serializer { buf: Vec::new() }
+impl<'a> Serializer<'a> {
+    fn new(buf: &'a mut [u8]) -> Self {
+        Serializer { buf, idx: 0 }
+    }
+
+    fn push(&mut self, c: u8) -> Result<()> {
+        if self.idx < self.buf.len() {
+            unsafe { self.push_unchecked(c) };
+            Ok(())
+        } else {
+            Err(Error::BufferFull)
+        }
+    }
+
+    unsafe fn push_unchecked(&mut self, c: u8) {
+        self.buf[self.idx] = c;
+        self.idx += 1;
+    }
+
+    fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
+        if self.idx + other.len() > self.buf.len() {
+            // won't fit in the buf; don't modify anything and return an error
+            Err(Error::Test(self.buf.len()))
+        } else {
+            for c in other {
+                unsafe { self.push_unchecked(c.clone()) };
+            }
+            Ok(())
+        }
     }
 }
 
@@ -86,7 +109,7 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self.extend_from_slice(&buf[i..])?;
         Ok(())
     }};
 }
@@ -120,7 +143,7 @@ macro_rules! serialize_signed {
         } else {
             i += 1;
         }
-        $self.buf.extend_from_slice(&buf[i..])?;
+        $self.extend_from_slice(&buf[i..])?;
         Ok(())
     }};
 }
@@ -129,30 +152,27 @@ macro_rules! serialize_fmt {
     ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
         let mut s: String<$uxx> = String::new();
         write!(&mut s, $fmt, $v).unwrap();
-        $self.buf.extend_from_slice(s.as_bytes())?;
+        $self.extend_from_slice(s.as_bytes())?;
         Ok(())
     }};
 }
 
-impl<'a, B> ser::Serializer for &'a mut Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
+impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     type Ok = ();
     type Error = Error;
-    type SerializeSeq = SerializeSeq<'a, B>;
-    type SerializeTuple = SerializeSeq<'a, B>;
+    type SerializeSeq = SerializeSeq<'a, 'b>;
+    type SerializeTuple = SerializeSeq<'a, 'b>;
     type SerializeTupleStruct = Unreachable;
     type SerializeTupleVariant = Unreachable;
-    type SerializeMap = SerializeMap<'a, B>;
-    type SerializeStruct = SerializeStruct<'a, B>;
+    type SerializeMap = SerializeMap<'a, 'b>;
+    type SerializeStruct = SerializeStruct<'a, 'b>;
     type SerializeStructVariant = Unreachable;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
-            self.buf.extend_from_slice(b"true")?;
+            self.extend_from_slice(b"true")?;
         } else {
-            self.buf.extend_from_slice(b"false")?;
+            self.extend_from_slice(b"false")?;
         }
 
         Ok(())
@@ -211,9 +231,9 @@ where
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
-        self.buf.push(b'"')?;
-        self.buf.extend_from_slice(v.as_bytes())?;
-        self.buf.push(b'"')?;
+        self.push(b'"')?;
+        self.extend_from_slice(v.as_bytes())?;
+        self.push(b'"')?;
         Ok(())
     }
 
@@ -222,7 +242,7 @@ where
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        self.buf.extend_from_slice(b"null")?;
+        self.extend_from_slice(b"null")?;
         Ok(())
     }
 
@@ -275,7 +295,7 @@ where
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.buf.push(b'[')?;
+        self.push(b'[')?;
 
         Ok(SerializeSeq::new(self))
     }
@@ -303,13 +323,13 @@ where
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        self.buf.push(b'{')?;
+        self.push(b'{')?;
 
         Ok(SerializeMap::new(self))
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.buf.push(b'{')?;
+        self.push(b'{')?;
 
         Ok(SerializeStruct::new(self))
     }
@@ -338,9 +358,7 @@ where
     B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new();
-    value.serialize(&mut ser)?;
-    Ok(unsafe { String::from_utf8_unchecked(ser.buf) })
+    Ok(unsafe { String::from_utf8_unchecked(to_vec(value)?) })
 }
 
 /// Serializes the given data structure as a JSON byte vector
@@ -349,9 +367,21 @@ where
     B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new();
+    let mut buf = Vec::<u8, B>::new();
+    buf.resize_default(B::to_usize())?;
+    let len = to_slice(value, &mut buf)?;
+    buf.truncate(len);
+    Ok(buf)
+}
+
+/// Serializes the given data structure as a JSON byte vector into the provided buffer
+pub fn to_slice<T>(value: &T, buf: &mut [u8]) -> Result<usize>
+where
+    T: ser::Serialize + ?Sized,
+{
+    let mut ser = Serializer::new(buf);
     value.serialize(&mut ser)?;
-    Ok(ser.buf)
+    Ok(ser.idx)
 }
 
 impl ser::Error for Error {
@@ -440,11 +470,20 @@ mod tests {
 
     #[test]
     fn array() {
+        let buf = &mut [0u8; 128];
+        let len = crate::to_slice(&[0, 1, 2], buf).unwrap();
+        assert_eq!(len, 7);
+        assert_eq!(&buf[..len], b"[0,1,2]");
         assert_eq!(&*crate::to_string::<N, _>(&[0, 1, 2]).unwrap(), "[0,1,2]");
     }
 
     #[test]
     fn bool() {
+        let buf = &mut [0u8; 128];
+        let len = crate::to_slice(&true, buf).unwrap();
+        assert_eq!(len, 4);
+        assert_eq!(&buf[..len], b"true");
+
         assert_eq!(&*crate::to_string::<N, _>(&true).unwrap(), "true");
     }
 
