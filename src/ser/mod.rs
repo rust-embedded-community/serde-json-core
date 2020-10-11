@@ -1,11 +1,11 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::{fmt, fmt::Write};
+use core::fmt;
 
 use serde::ser;
 use serde::ser::SerializeStruct as _;
 
-use heapless::{consts::*, String, Vec};
+use heapless::{String, Vec};
 
 use self::map::SerializeMap;
 use self::seq::SerializeSeq;
@@ -147,11 +147,11 @@ macro_rules! serialize_signed {
     }};
 }
 
-macro_rules! serialize_fmt {
-    ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
-        let mut s: String<$uxx> = String::new();
-        write!(&mut s, $fmt, $v).unwrap();
-        $self.extend_from_slice(s.as_bytes())
+macro_rules! serialize_ryu {
+    ($self:ident, $v:expr) => {{
+        let mut buffer = ryu::Buffer::new();
+        let printed = buffer.format($v);
+        $self.extend_from_slice(printed.as_bytes())
     }};
 }
 
@@ -229,11 +229,11 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
-        serialize_fmt!(self, U16, "{:e}", v)
+        serialize_ryu!(self, v)
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
-        serialize_fmt!(self, U32, "{:e}", v)
+        serialize_ryu!(self, v)
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {
@@ -683,7 +683,7 @@ mod tests {
 
         assert_eq!(
             &*crate::to_string::<N, _>(&Temperature { temperature: -20. }).unwrap(),
-            r#"{"temperature":-2e1}"#
+            r#"{"temperature":-20.0}"#
         );
 
         assert_eq!(
@@ -691,7 +691,7 @@ mod tests {
                 temperature: -20345.
             })
             .unwrap(),
-            r#"{"temperature":-2.0345e4}"#
+            r#"{"temperature":-20345.0}"#
         );
 
         assert_eq!(
