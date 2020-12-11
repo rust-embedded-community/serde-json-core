@@ -1,30 +1,19 @@
 use serde::ser;
 
-use heapless::ArrayLength;
-
 use crate::ser::{Error, Result, Serializer};
 
-pub struct SerializeStruct<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    ser: &'a mut Serializer<B>,
+pub struct SerializeStruct<'a, 'b> {
+    ser: &'a mut Serializer<'b>,
     first: bool,
 }
 
-impl<'a, B> SerializeStruct<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    pub(crate) fn new(ser: &'a mut Serializer<B>) -> Self {
+impl<'a, 'b: 'a> SerializeStruct<'a, 'b> {
+    pub(crate) fn new(ser: &'a mut Serializer<'b>) -> Self {
         SerializeStruct { ser, first: true }
     }
 }
 
-impl<'a, B> ser::SerializeStruct for SerializeStruct<'a, B>
-where
-    B: ArrayLength<u8>,
-{
+impl<'a, 'b: 'a> ser::SerializeStruct for SerializeStruct<'a, 'b> {
     type Ok = ();
     type Error = Error;
 
@@ -34,13 +23,13 @@ where
     {
         // XXX if `value` is `None` we not produce any output for this field
         if !self.first {
-            self.ser.buf.push(b',')?;
+            self.ser.push(b',')?;
         }
         self.first = false;
 
-        self.ser.buf.push(b'"')?;
-        self.ser.buf.extend_from_slice(key.as_bytes())?;
-        self.ser.buf.extend_from_slice(b"\":")?;
+        self.ser.push(b'"')?;
+        self.ser.extend_from_slice(key.as_bytes())?;
+        self.ser.extend_from_slice(b"\":")?;
 
         value.serialize(&mut *self.ser)?;
 
@@ -48,32 +37,23 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        self.ser.buf.push(b'}')?;
+        self.ser.push(b'}')?;
         Ok(())
     }
 }
 
-pub struct SerializeStructVariant<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    ser: &'a mut Serializer<B>,
+pub struct SerializeStructVariant<'a, 'b> {
+    ser: &'a mut Serializer<'b>,
     first: bool,
 }
 
-impl<'a, B> SerializeStructVariant<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    pub(crate) fn new(ser: &'a mut Serializer<B>) -> Self {
+impl<'a, 'b: 'a> SerializeStructVariant<'a, 'b> {
+    pub(crate) fn new(ser: &'a mut Serializer<'b>) -> Self {
         SerializeStructVariant { ser, first: true }
     }
 }
 
-impl<'a, B> ser::SerializeStructVariant for SerializeStructVariant<'a, B>
-where
-    B: ArrayLength<u8>,
-{
+impl<'a, 'b: 'a> ser::SerializeStructVariant for SerializeStructVariant<'a, 'b> {
     type Ok = ();
     type Error = Error;
 
@@ -83,13 +63,13 @@ where
     {
         // XXX if `value` is `None` we not produce any output for this field
         if !self.first {
-            self.ser.buf.push(b',')?;
+            self.ser.push(b',')?;
         }
         self.first = false;
 
-        self.ser.buf.push(b'"')?;
-        self.ser.buf.extend_from_slice(key.as_bytes())?;
-        self.ser.buf.extend_from_slice(b"\":")?;
+        self.ser.push(b'"')?;
+        self.ser.extend_from_slice(key.as_bytes())?;
+        self.ser.extend_from_slice(b"\":")?;
 
         value.serialize(&mut *self.ser)?;
 
@@ -97,7 +77,7 @@ where
     }
 
     fn end(self) -> Result<Self::Ok> {
-        self.ser.buf.extend_from_slice(b"}}")?;
+        self.ser.extend_from_slice(b"}}")?;
         Ok(())
     }
 }
