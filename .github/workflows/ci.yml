@@ -39,5 +39,10 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
+          command: build
+          args: --target=${{ matrix.TARGET }}
+      - uses: actions-rs/cargo@v1
+        if: ${{ contains(matrix.TARGET, 'x86_64') }}
+        with:
           command: test
           args: --target=${{ matrix.TARGET }}
