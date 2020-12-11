@@ -175,10 +175,37 @@ impl<'a> Deserializer<'a> {
         loop {
             match self.peek() {
                 Some(b'"') => {
-                    let end = self.index;
-                    self.eat_char();
-                    return str::from_utf8(&self.slice[start..end])
-                        .map_err(|_| Error::InvalidUnicodeCodePoint);
+                    // Counts the number of backslashes in front of the current index.
+                    //
+                    // "some string with \\\" included."
+                    //                  ^^^^^
+                    //                  |||||
+                    //       loop run:  4321|
+                    //                      |
+                    //                   `index`
+                    //
+                    // Since we only get in this code branch if we found a " starting the string and `index` is greater
+                    // than the start position, we know the loop will end no later than this point.
+                    let leading_backslashes = |index: usize| -> usize {
+                        let mut count = 0;
+                        loop {
+                            if self.slice[index - count - 1] == b'\\' {
+                                count += 1;
+                            } else {
+                                return count;
+                            }
+                        }
+                    };
+
+                    let is_escaped = leading_backslashes(self.index) % 2 == 1;
+                    if is_escaped {
+                        self.eat_char(); // just continue
+                    } else {
+                        let end = self.index;
+                        self.eat_char();
+                        return str::from_utf8(&self.slice[start..end])
+                            .map_err(|_| Error::InvalidUnicodeCodePoint);
+                    }
                 }
                 Some(_) => self.eat_char(),
                 None => return Err(Error::EofWhileParsingString),
@@ -745,6 +772,34 @@ mod tests {
     #[test]
     fn str() {
         assert_eq!(crate::from_str(r#" "hello" "#), Ok("hello"));
+        assert_eq!(crate::from_str(r#" "" "#), Ok(""));
+        assert_eq!(crate::from_str(r#" " " "#), Ok(" "));
+        assert_eq!(crate::from_str(r#" "👏" "#), Ok("👏"));
+
+        // no unescaping is done (as documented as a known issue in lib.rs)
+        assert_eq!(crate::from_str(r#" "hel\tlo" "#), Ok("hel\\tlo"));
+        assert_eq!(crate::from_str(r#" "hello \\" "#), Ok("hello \\\\"));
+
+        // escaped " in the string content
+        assert_eq!(crate::from_str(r#" "foo\"bar" "#), Ok(r#"foo\"bar"#));
+        assert_eq!(crate::from_str(r#" "foo\\\"bar" "#), Ok(r#"foo\\\"bar"#));
+        assert_eq!(crate::from_str(r#" "foo\"\"bar" "#), Ok(r#"foo\"\"bar"#));
+        assert_eq!(crate::from_str(r#" "\"bar" "#), Ok(r#"\"bar"#));
+        assert_eq!(crate::from_str(r#" "foo\"" "#), Ok(r#"foo\""#));
+        assert_eq!(crate::from_str(r#" "\"" "#), Ok(r#"\""#));
+
+        // non-excaped " preceded by backslashes
+        assert_eq!(crate::from_str(r#" "foo bar\\" "#), Ok(r#"foo bar\\"#));
+        assert_eq!(crate::from_str(r#" "foo bar\\\\" "#), Ok(r#"foo bar\\\\"#));
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\\\" "#),
+            Ok(r#"foo bar\\\\\\"#)
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\\\\\" "#),
+            Ok(r#"foo bar\\\\\\\\"#)
+        );
+        assert_eq!(crate::from_str(r#" "\\" "#), Ok(r#"\\"#));
     }
 
     #[test]
@@ -1029,28 +1084,28 @@ mod tests {
         assert_eq!(
             crate::from_str::<Thing<'_>>(
                 r#"
-{
-  "type": "thing",
-  "properties": {
-    "temperature": {
-      "type": "number",
-      "unit": "celsius",
-      "description": "An ambient temperature sensor",
-      "href": "/properties/temperature"
-    },
-    "humidity": {
-      "type": "number",
-      "unit": "percent",
-      "href": "/properties/humidity"
-    },
-    "led": {
-      "type": "boolean",
-      "description": "A red LED",
-      "href": "/properties/led"
-    }
-  }
-}
-"#
+                    {
+                    "type": "thing",
+                    "properties": {
+                        "temperature": {
+                        "type": "number",
+                        "unit": "celsius",
+                        "description": "An ambient temperature sensor",
+                        "href": "/properties/temperature"
+                        },
+                        "humidity": {
+                        "type": "number",
+                        "unit": "percent",
+                        "href": "/properties/humidity"
+                        },
+                        "led": {
+                        "type": "boolean",
+                        "description": "A red LED",
+                        "href": "/properties/led"
+                        }
+                    }
+                    }
+                    "#
             ),
             Ok(Thing {
                 properties: Properties {
