@@ -53,16 +53,16 @@ impl fmt::Display for Error {
 
 pub(crate) struct Serializer<'a> {
     buf: &'a mut [u8],
-    idx: usize,
+    current_length: usize,
 }
 
 impl<'a> Serializer<'a> {
     fn new(buf: &'a mut [u8]) -> Self {
-        Serializer { buf, idx: 0 }
+        Serializer { buf, current_length: 0 }
     }
 
     fn push(&mut self, c: u8) -> Result<()> {
-        if self.idx < self.buf.len() {
+        if self.current_length < self.buf.len() {
             unsafe { self.push_unchecked(c) };
             Ok(())
         } else {
@@ -71,12 +71,12 @@ impl<'a> Serializer<'a> {
     }
 
     unsafe fn push_unchecked(&mut self, c: u8) {
-        self.buf[self.idx] = c;
-        self.idx += 1;
+        self.buf[self.current_length] = c;
+        self.current_length += 1;
     }
 
     fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
-        if self.idx + other.len() > self.buf.len() {
+        if self.current_length + other.len() > self.buf.len() {
             // won't fit in the buf; don't modify anything and return an error
             Err(Error::BufferFull)
         } else {
@@ -107,8 +107,7 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.extend_from_slice(&buf[i..])?;
-        Ok(())
+        $self.extend_from_slice(&buf[i..])
     }};
 }
 
@@ -141,8 +140,7 @@ macro_rules! serialize_signed {
         } else {
             i += 1;
         }
-        $self.extend_from_slice(&buf[i..])?;
-        Ok(())
+        $self.extend_from_slice(&buf[i..])
     }};
 }
 
@@ -150,8 +148,7 @@ macro_rules! serialize_fmt {
     ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
         let mut s: String<$uxx> = String::new();
         write!(&mut s, $fmt, $v).unwrap();
-        $self.extend_from_slice(s.as_bytes())?;
-        Ok(())
+        $self.extend_from_slice(s.as_bytes())
     }};
 }
 
@@ -168,12 +165,10 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
-            self.extend_from_slice(b"true")?;
+            self.extend_from_slice(b"true")
         } else {
-            self.extend_from_slice(b"false")?;
+            self.extend_from_slice(b"false")
         }
-
-        Ok(())
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok> {
@@ -231,8 +226,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
         self.push(b'"')?;
         self.extend_from_slice(v.as_bytes())?;
-        self.push(b'"')?;
-        Ok(())
+        self.push(b'"')
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok> {
@@ -240,8 +234,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        self.extend_from_slice(b"null")?;
-        Ok(())
+        self.extend_from_slice(b"null")
     }
 
     fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok>
@@ -379,7 +372,7 @@ where
 {
     let mut ser = Serializer::new(buf);
     value.serialize(&mut ser)?;
-    Ok(ser.idx)
+    Ok(ser.current_length)
 }
 
 impl ser::Error for Error {
