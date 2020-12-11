@@ -84,7 +84,7 @@ impl<'a> Serializer<'a> {
             Err(Error::BufferFull)
         } else {
             for c in other {
-                unsafe { self.push_unchecked(c.clone()) };
+                unsafe { self.push_unchecked(*c) };
             }
             Ok(())
         }
