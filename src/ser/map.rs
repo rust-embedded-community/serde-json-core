@@ -1,35 +1,24 @@
 use serde::ser;
 
-use heapless::ArrayLength;
-
 use crate::ser::{Error, Result, Serializer};
 
-pub struct SerializeMap<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    ser: &'a mut Serializer<B>,
+pub struct SerializeMap<'a, 'b> {
+    ser: &'a mut Serializer<'b>,
     first: bool,
 }
 
-impl<'a, B> SerializeMap<'a, B>
-where
-    B: ArrayLength<u8>,
-{
-    pub(crate) fn new(ser: &'a mut Serializer<B>) -> Self {
+impl<'a, 'b: 'a> SerializeMap<'a, 'b> {
+    pub(crate) fn new(ser: &'a mut Serializer<'b>) -> Self {
         SerializeMap { ser, first: true }
     }
 }
 
-impl<'a, B> ser::SerializeMap for SerializeMap<'a, B>
-where
-    B: ArrayLength<u8>,
-{
+impl<'a, 'b: 'a> ser::SerializeMap for SerializeMap<'a, 'b> {
     type Ok = ();
     type Error = Error;
 
     fn end(self) -> Result<Self::Ok> {
-        self.ser.buf.push(b'}')?;
+        self.ser.push(b'}')?;
         Ok(())
     }
 
@@ -38,11 +27,11 @@ where
         T: ser::Serialize,
     {
         if !self.first {
-            self.ser.buf.push(b',')?;
+            self.ser.push(b',')?;
         }
         self.first = false;
         key.serialize(&mut *self.ser)?;
-        self.ser.buf.extend_from_slice(b":")?;
+        self.ser.extend_from_slice(b":")?;
         Ok(())
     }
 

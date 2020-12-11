@@ -5,7 +5,7 @@ use core::{fmt, str};
 
 use serde::de::{self, Visitor};
 
-use self::enum_::UnitVariantAccess;
+use self::enum_::{UnitVariantAccess, VariantAccess};
 use self::map::MapAccess;
 use self::seq::SeqAccess;
 
@@ -18,6 +18,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 /// This type represents all possible errors that can occur when deserializing JSON data
 #[derive(Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Error {
     /// EOF while parsing a list.
     EofWhileParsingList,
@@ -73,9 +74,6 @@ pub enum Error {
     /// Error with a custom message that was preserved.
     #[cfg(feature = "custom-error-messages")]
     CustomErrorWithMessage(heapless::String<heapless::consts::U64>),
-
-    #[doc(hidden)]
-    __Extensible,
 }
 
 #[cfg(feature = "std")]
@@ -498,28 +496,40 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    /// Unsupported. Use a more specific deserialize_* method
-    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        let peek = match self.parse_whitespace() {
+            Some(b) => b,
+            None => {
+                return Err(Error::EofWhileParsingValue);
+            }
+        };
+
+        match peek {
+            b'n' => {
+                self.eat_char();
+                self.parse_ident(b"ull")?;
+                visitor.visit_unit()
+            }
+            _ => Err(Error::InvalidType),
+        }
     }
 
-    /// Unsupported. Use a more specific deserialize_* method
-    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_unit(visitor)
     }
 
     /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
@@ -600,6 +610,17 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
+            b'{' => {
+                self.eat_char();
+                let value = visitor.visit_enum(VariantAccess::new(self))?;
+                match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+                    b'}' => {
+                        self.eat_char();
+                        Ok(value)
+                    }
+                    _ => Err(Error::ExpectedSomeValue),
+                }
+            }
             _ => Err(Error::ExpectedSomeValue),
         }
     }
@@ -741,8 +762,8 @@ mod tests {
 
     #[test]
     fn array() {
-        assert_eq!(crate::from_str::<[i32; 0]>("[]"), Ok([]));
-        assert_eq!(crate::from_str("[0, 1, 2]"), Ok([0, 1, 2]));
+        assert_eq!(crate::from_str::<[i32; 0]>("[]"), Ok(([], 2)));
+        assert_eq!(crate::from_str("[0, 1, 2]"), Ok(([0, 1, 2], 9)));
 
         // errors
         assert!(crate::from_str::<[i32; 2]>("[0, 1,]").is_err());
@@ -750,13 +771,13 @@ mod tests {
 
     #[test]
     fn bool() {
-        assert_eq!(crate::from_str("true"), Ok(true));
-        assert_eq!(crate::from_str(" true"), Ok(true));
-        assert_eq!(crate::from_str("true "), Ok(true));
+        assert_eq!(crate::from_str("true"), Ok((true, 4)));
+        assert_eq!(crate::from_str(" true"), Ok((true, 5)));
+        assert_eq!(crate::from_str("true "), Ok((true, 5)));
 
-        assert_eq!(crate::from_str("false"), Ok(false));
-        assert_eq!(crate::from_str(" false"), Ok(false));
-        assert_eq!(crate::from_str("false "), Ok(false));
+        assert_eq!(crate::from_str("false"), Ok((false, 5)));
+        assert_eq!(crate::from_str(" false"), Ok((false, 6)));
+        assert_eq!(crate::from_str("false "), Ok((false, 6)));
 
         // errors
         assert!(crate::from_str::<bool>("true false").is_err());
@@ -765,42 +786,54 @@ mod tests {
 
     #[test]
     fn enum_clike() {
-        assert_eq!(crate::from_str(r#" "boolean" "#), Ok(Type::Boolean));
-        assert_eq!(crate::from_str(r#" "number" "#), Ok(Type::Number));
-        assert_eq!(crate::from_str(r#" "thing" "#), Ok(Type::Thing));
+        assert_eq!(crate::from_str(r#" "boolean" "#), Ok((Type::Boolean, 11)));
+        assert_eq!(crate::from_str(r#" "number" "#), Ok((Type::Number, 10)));
+        assert_eq!(crate::from_str(r#" "thing" "#), Ok((Type::Thing, 9)));
     }
 
     #[test]
     fn str() {
-        assert_eq!(crate::from_str(r#" "hello" "#), Ok("hello"));
-        assert_eq!(crate::from_str(r#" "" "#), Ok(""));
-        assert_eq!(crate::from_str(r#" " " "#), Ok(" "));
-        assert_eq!(crate::from_str(r#" "👏" "#), Ok("👏"));
+        assert_eq!(crate::from_str(r#" "hello" "#), Ok(("hello", 9)));
+        assert_eq!(crate::from_str(r#" "" "#), Ok(("", 4)));
+        assert_eq!(crate::from_str(r#" " " "#), Ok((" ", 5)));
+        assert_eq!(crate::from_str(r#" "👏" "#), Ok(("👏", 8)));
 
         // no unescaping is done (as documented as a known issue in lib.rs)
-        assert_eq!(crate::from_str(r#" "hel\tlo" "#), Ok("hel\\tlo"));
-        assert_eq!(crate::from_str(r#" "hello \\" "#), Ok("hello \\\\"));
+        assert_eq!(crate::from_str(r#" "hel\tlo" "#), Ok(("hel\\tlo", 11)));
+        assert_eq!(crate::from_str(r#" "hello \\" "#), Ok(("hello \\\\", 12)));
 
         // escaped " in the string content
-        assert_eq!(crate::from_str(r#" "foo\"bar" "#), Ok(r#"foo\"bar"#));
-        assert_eq!(crate::from_str(r#" "foo\\\"bar" "#), Ok(r#"foo\\\"bar"#));
-        assert_eq!(crate::from_str(r#" "foo\"\"bar" "#), Ok(r#"foo\"\"bar"#));
-        assert_eq!(crate::from_str(r#" "\"bar" "#), Ok(r#"\"bar"#));
-        assert_eq!(crate::from_str(r#" "foo\"" "#), Ok(r#"foo\""#));
-        assert_eq!(crate::from_str(r#" "\"" "#), Ok(r#"\""#));
+        assert_eq!(crate::from_str(r#" "foo\"bar" "#), Ok((r#"foo\"bar"#, 12)));
+        assert_eq!(
+            crate::from_str(r#" "foo\\\"bar" "#),
+            Ok((r#"foo\\\"bar"#, 14))
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo\"\"bar" "#),
+            Ok((r#"foo\"\"bar"#, 14))
+        );
+        assert_eq!(crate::from_str(r#" "\"bar" "#), Ok((r#"\"bar"#, 9)));
+        assert_eq!(crate::from_str(r#" "foo\"" "#), Ok((r#"foo\""#, 9)));
+        assert_eq!(crate::from_str(r#" "\"" "#), Ok((r#"\""#, 6)));
 
         // non-excaped " preceded by backslashes
-        assert_eq!(crate::from_str(r#" "foo bar\\" "#), Ok(r#"foo bar\\"#));
-        assert_eq!(crate::from_str(r#" "foo bar\\\\" "#), Ok(r#"foo bar\\\\"#));
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\" "#),
+            Ok((r#"foo bar\\"#, 13))
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\" "#),
+            Ok((r#"foo bar\\\\"#, 15))
+        );
         assert_eq!(
             crate::from_str(r#" "foo bar\\\\\\" "#),
-            Ok(r#"foo bar\\\\\\"#)
+            Ok((r#"foo bar\\\\\\"#, 17))
         );
         assert_eq!(
             crate::from_str(r#" "foo bar\\\\\\\\" "#),
-            Ok(r#"foo bar\\\\\\\\"#)
+            Ok((r#"foo bar\\\\\\\\"#, 19))
         );
-        assert_eq!(crate::from_str(r#" "\\" "#), Ok(r#"\\"#));
+        assert_eq!(crate::from_str(r#" "\\" "#), Ok((r#"\\"#, 6)));
     }
 
     #[test]
@@ -810,10 +843,13 @@ mod tests {
             led: bool,
         }
 
-        assert_eq!(crate::from_str(r#"{ "led": true }"#), Ok(Led { led: true }));
+        assert_eq!(
+            crate::from_str(r#"{ "led": true }"#),
+            Ok((Led { led: true }, 15))
+        );
         assert_eq!(
             crate::from_str(r#"{ "led": false }"#),
-            Ok(Led { led: false })
+            Ok((Led { led: false }, 16))
         );
     }
 
@@ -826,17 +862,17 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -17 }"#),
-            Ok(Temperature { temperature: -17 })
+            Ok((Temperature { temperature: -17 }, 22))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -0 }"#),
-            Ok(Temperature { temperature: -0 })
+            Ok((Temperature { temperature: -0 }, 21))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 0 }"#),
-            Ok(Temperature { temperature: 0 })
+            Ok((Temperature { temperature: 0 }, 20))
         );
 
         // out of range
@@ -853,33 +889,39 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -17.2 }"#),
-            Ok(Temperature { temperature: -17.2 })
+            Ok((Temperature { temperature: -17.2 }, 24))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -0.0 }"#),
-            Ok(Temperature { temperature: -0. })
+            Ok((Temperature { temperature: -0. }, 23))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -2.1e-3 }"#),
-            Ok(Temperature {
-                temperature: -2.1e-3
-            })
+            Ok((
+                Temperature {
+                    temperature: -2.1e-3
+                },
+                26
+            ))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -3 }"#),
-            Ok(Temperature { temperature: -3. })
+            Ok((Temperature { temperature: -3. }, 21))
         );
 
         use core::f32;
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -1e500 }"#),
-            Ok(Temperature {
-                temperature: f32::NEG_INFINITY
-            })
+            Ok((
+                Temperature {
+                    temperature: f32::NEG_INFINITY
+                },
+                25
+            ))
         );
 
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
@@ -899,17 +941,23 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "description": "An ambient temperature sensor" }"#),
-            Ok(Property {
-                description: Some("An ambient temperature sensor"),
-            })
+            Ok((
+                Property {
+                    description: Some("An ambient temperature sensor"),
+                },
+                50
+            ))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "description": null }"#),
-            Ok(Property { description: None })
+            Ok((Property { description: None }, 23))
         );
 
-        assert_eq!(crate::from_str(r#"{}"#), Ok(Property { description: None }));
+        assert_eq!(
+            crate::from_str(r#"{}"#),
+            Ok((Property { description: None }, 2))
+        );
     }
 
     #[test]
@@ -921,12 +969,12 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20 }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 21))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 0 }"#),
-            Ok(Temperature { temperature: 0 })
+            Ok((Temperature { temperature: 0 }, 20))
         );
 
         // out of range
@@ -935,13 +983,48 @@ mod tests {
     }
 
     #[test]
+    fn test_unit() {
+        assert_eq!(crate::from_str::<()>(r#"null"#), Ok(((), 4)));
+    }
+
+    #[test]
+    fn newtype_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct A(pub u32);
+
+        assert_eq!(crate::from_str::<A>(r#"54"#), Ok((A(54), 2)));
+    }
+
+    #[test]
+    fn test_newtype_variant() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        enum A {
+            A(u32),
+        }
+        let a = A::A(54);
+        let x = crate::from_str::<A>(r#"{"A":54}"#);
+        assert_eq!(x, Ok((a, 8)));
+    }
+
+    #[test]
+    fn test_struct_variant() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        enum A {
+            A { x: u32, y: u16 },
+        }
+        let a = A::A { x: 54, y: 720 };
+        let x = crate::from_str::<A>(r#"{"A": {"x":54,"y":720 } }"#);
+        assert_eq!(x, Ok((a, 25)));
+    }
+
+    #[test]
     #[cfg(not(feature = "custom-error-messages"))]
     fn struct_tuple() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Xy(i8, i8);
 
-        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
-        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok((Xy(10, 20), 8)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok((Xy(10, -20), 9)));
 
         // wrong number of args
         assert_eq!(
@@ -960,8 +1043,8 @@ mod tests {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Xy(i8, i8);
 
-        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
-        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok((Xy(10, 20), 8)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok((Xy(10, -20), 9)));
 
         // wrong number of args
         assert_eq!(
@@ -985,31 +1068,31 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20, "high": 80, "low": -10, "updated": true }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 62))
         );
 
         assert_eq!(
             crate::from_str(
                 r#"{ "temperature": 20, "conditions": "windy", "forecast": "cloudy" }"#
             ),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 66))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20, "hourly_conditions": ["windy", "rainy"] }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 62))
         );
 
         assert_eq!(
             crate::from_str(
                 r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#
             ),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 84))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20, "invalid": this-is-ignored }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 49))
         );
 
         assert_eq!(
@@ -1107,29 +1190,32 @@ mod tests {
                     }
                     "#
             ),
-            Ok(Thing {
-                properties: Properties {
-                    temperature: Property {
-                        ty: Type::Number,
-                        unit: Some("celsius"),
-                        description: Some("An ambient temperature sensor"),
-                        href: "/properties/temperature",
+            Ok((
+                Thing {
+                    properties: Properties {
+                        temperature: Property {
+                            ty: Type::Number,
+                            unit: Some("celsius"),
+                            description: Some("An ambient temperature sensor"),
+                            href: "/properties/temperature",
+                        },
+                        humidity: Property {
+                            ty: Type::Number,
+                            unit: Some("percent"),
+                            description: None,
+                            href: "/properties/humidity",
+                        },
+                        led: Property {
+                            ty: Type::Boolean,
+                            unit: None,
+                            description: Some("A red LED"),
+                            href: "/properties/led",
+                        },
                     },
-                    humidity: Property {
-                        ty: Type::Number,
-                        unit: Some("percent"),
-                        description: None,
-                        href: "/properties/humidity",
-                    },
-                    led: Property {
-                        ty: Type::Boolean,
-                        unit: None,
-                        description: Some("A red LED"),
-                        href: "/properties/led",
-                    },
+                    ty: Type::Thing,
                 },
-                ty: Type::Thing,
-            })
+                852
+            ))
         )
     }
 }
