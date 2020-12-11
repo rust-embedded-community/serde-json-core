@@ -51,19 +51,43 @@ impl fmt::Display for Error {
     }
 }
 
-pub(crate) struct Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
-    buf: Vec<u8, B>,
+pub(crate) struct Serializer<'a> {
+    buf: &'a mut [u8],
+    current_length: usize,
 }
 
-impl<B> Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
-    fn new() -> Self {
-        Serializer { buf: Vec::new() }
+impl<'a> Serializer<'a> {
+    fn new(buf: &'a mut [u8]) -> Self {
+        Serializer {
+            buf,
+            current_length: 0,
+        }
+    }
+
+    fn push(&mut self, c: u8) -> Result<()> {
+        if self.current_length < self.buf.len() {
+            unsafe { self.push_unchecked(c) };
+            Ok(())
+        } else {
+            Err(Error::BufferFull)
+        }
+    }
+
+    unsafe fn push_unchecked(&mut self, c: u8) {
+        self.buf[self.current_length] = c;
+        self.current_length += 1;
+    }
+
+    fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
+        if self.current_length + other.len() > self.buf.len() {
+            // won't fit in the buf; don't modify anything and return an error
+            Err(Error::BufferFull)
+        } else {
+            for c in other {
+                unsafe { self.push_unchecked(c.clone()) };
+            }
+            Ok(())
+        }
     }
 }
 
@@ -86,8 +110,7 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.buf.extend_from_slice(&buf[i..])?;
-        Ok(())
+        $self.extend_from_slice(&buf[i..])
     }};
 }
 
@@ -120,8 +143,7 @@ macro_rules! serialize_signed {
         } else {
             i += 1;
         }
-        $self.buf.extend_from_slice(&buf[i..])?;
-        Ok(())
+        $self.extend_from_slice(&buf[i..])
     }};
 }
 
@@ -129,8 +151,7 @@ macro_rules! serialize_fmt {
     ($self:ident, $uxx:ident, $fmt:expr, $v:expr) => {{
         let mut s: String<$uxx> = String::new();
         write!(&mut s, $fmt, $v).unwrap();
-        $self.buf.extend_from_slice(s.as_bytes())?;
-        Ok(())
+        $self.extend_from_slice(s.as_bytes())
     }};
 }
 
@@ -148,28 +169,23 @@ fn hex(c: u8) -> (u8, u8) {
     (hex_4bit(c >> 4), hex_4bit(c & 0x0F))
 }
 
-impl<'a, B> ser::Serializer for &'a mut Serializer<B>
-where
-    B: heapless::ArrayLength<u8>,
-{
+impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     type Ok = ();
     type Error = Error;
-    type SerializeSeq = SerializeSeq<'a, B>;
-    type SerializeTuple = SerializeSeq<'a, B>;
+    type SerializeSeq = SerializeSeq<'a, 'b>;
+    type SerializeTuple = SerializeSeq<'a, 'b>;
     type SerializeTupleStruct = Unreachable;
     type SerializeTupleVariant = Unreachable;
-    type SerializeMap = SerializeMap<'a, B>;
-    type SerializeStruct = SerializeStruct<'a, B>;
+    type SerializeMap = SerializeMap<'a, 'b>;
+    type SerializeStruct = SerializeStruct<'a, 'b>;
     type SerializeStructVariant = Unreachable;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
         if v {
-            self.buf.extend_from_slice(b"true")?;
+            self.extend_from_slice(b"true")
         } else {
-            self.buf.extend_from_slice(b"false")?;
+            self.extend_from_slice(b"false")
         }
-
-        Ok(())
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok> {
@@ -225,8 +241,7 @@ where
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
-        self.buf.push(b'"')?;
-
+        self.push(b'"')?;
 
         // Do escaping according to "6. MUST represent all strings (including object member names) in
         // their minimal-length UTF-8 encoding": https://gibson042.github.io/canonicaljson-spec/
@@ -243,51 +258,50 @@ where
         for c in v.chars() {
             match c {
                 '\\' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'\\')?;
+                    self.push(b'\\')?;
+                    self.push(b'\\')?;
                 }
                 '"' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'"')?;
+                    self.push(b'\\')?;
+                    self.push(b'"')?;
                 }
                 '\u{0008}' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'b')?;
+                    self.push(b'\\')?;
+                    self.push(b'b')?;
                 }
                 '\u{0009}' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b't')?;
+                    self.push(b'\\')?;
+                    self.push(b't')?;
                 }
                 '\u{000A}' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'n')?;
+                    self.push(b'\\')?;
+                    self.push(b'n')?;
                 }
                 '\u{000C}' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'f')?;
+                    self.push(b'\\')?;
+                    self.push(b'f')?;
                 }
                 '\u{000D}' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'r')?;
+                    self.push(b'\\')?;
+                    self.push(b'r')?;
                 }
                 '\u{0000}'..='\u{001F}' => {
-                    self.buf.push(b'\\')?;
-                    self.buf.push(b'u')?;
-                    self.buf.push(b'0')?;
-                    self.buf.push(b'0')?;
+                    self.push(b'\\')?;
+                    self.push(b'u')?;
+                    self.push(b'0')?;
+                    self.push(b'0')?;
                     let (hex1, hex2) = hex(c as u8);
-                    self.buf.push(hex1)?;
-                    self.buf.push(hex2)?;
+                    self.push(hex1)?;
+                    self.push(hex2)?;
                 }
                 _ => {
                     let encoded = c.encode_utf8(&mut encoding_tmp as &mut [u8]);
-                    self.buf.extend_from_slice(encoded.as_bytes())?;
+                    self.extend_from_slice(encoded.as_bytes())?;
                 }
             }
         }
 
-        self.buf.push(b'"')?;
-        Ok(())
+        self.push(b'"')
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok> {
@@ -295,8 +309,7 @@ where
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        self.buf.extend_from_slice(b"null")?;
-        Ok(())
+        self.extend_from_slice(b"null")
     }
 
     fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok>
@@ -348,7 +361,7 @@ where
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.buf.push(b'[')?;
+        self.push(b'[')?;
 
         Ok(SerializeSeq::new(self))
     }
@@ -376,13 +389,13 @@ where
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        self.buf.push(b'{')?;
+        self.push(b'{')?;
 
         Ok(SerializeMap::new(self))
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.buf.push(b'{')?;
+        self.push(b'{')?;
 
         Ok(SerializeStruct::new(self))
     }
@@ -411,9 +424,7 @@ where
     B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new();
-    value.serialize(&mut ser)?;
-    Ok(unsafe { String::from_utf8_unchecked(ser.buf) })
+    Ok(unsafe { String::from_utf8_unchecked(to_vec(value)?) })
 }
 
 /// Serializes the given data structure as a JSON byte vector
@@ -422,9 +433,21 @@ where
     B: heapless::ArrayLength<u8>,
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new();
+    let mut buf = Vec::<u8, B>::new();
+    buf.resize_default(B::to_usize())?;
+    let len = to_slice(value, &mut buf)?;
+    buf.truncate(len);
+    Ok(buf)
+}
+
+/// Serializes the given data structure as a JSON byte vector into the provided buffer
+pub fn to_slice<T>(value: &T, buf: &mut [u8]) -> Result<usize>
+where
+    T: ser::Serialize + ?Sized,
+{
+    let mut ser = Serializer::new(buf);
     value.serialize(&mut ser)?;
-    Ok(ser.buf)
+    Ok(ser.current_length)
 }
 
 impl ser::Error for Error {
@@ -513,11 +536,20 @@ mod tests {
 
     #[test]
     fn array() {
+        let buf = &mut [0u8; 128];
+        let len = crate::to_slice(&[0, 1, 2], buf).unwrap();
+        assert_eq!(len, 7);
+        assert_eq!(&buf[..len], b"[0,1,2]");
         assert_eq!(&*crate::to_string::<N, _>(&[0, 1, 2]).unwrap(), "[0,1,2]");
     }
 
     #[test]
     fn bool() {
+        let buf = &mut [0u8; 128];
+        let len = crate::to_slice(&true, buf).unwrap();
+        assert_eq!(len, 4);
+        assert_eq!(&buf[..len], b"true");
+
         assert_eq!(&*crate::to_string::<N, _>(&true).unwrap(), "true");
     }
 
@@ -555,23 +587,62 @@ mod tests {
         assert_eq!(&*crate::to_string::<N, _>("💣").unwrap(), r#""💣""#); // 4 byte character
 
         // " and \ must be escaped
-        assert_eq!(&*crate::to_string::<N, _>("foo\"bar").unwrap(), r#""foo\"bar""#);
-        assert_eq!(&*crate::to_string::<N, _>("foo\\bar").unwrap(), r#""foo\\bar""#);
+        assert_eq!(
+            &*crate::to_string::<N, _>("foo\"bar").unwrap(),
+            r#""foo\"bar""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>("foo\\bar").unwrap(),
+            r#""foo\\bar""#
+        );
 
         // \b, \t, \n, \f, \r must be escaped in their two-character escaping
-        assert_eq!(&*crate::to_string::<N, _>(" \u{0008} ").unwrap(), r#"" \b ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{0009} ").unwrap(), r#"" \t ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{000A} ").unwrap(), r#"" \n ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{000C} ").unwrap(), r#"" \f ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{000D} ").unwrap(), r#"" \r ""#);
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0008} ").unwrap(),
+            r#"" \b ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0009} ").unwrap(),
+            r#"" \t ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000A} ").unwrap(),
+            r#"" \n ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000C} ").unwrap(),
+            r#"" \f ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000D} ").unwrap(),
+            r#"" \r ""#
+        );
 
         // U+0000 through U+001F is escaped using six-character \u00xx uppercase hexadecimal escape sequences
-        assert_eq!(&*crate::to_string::<N, _>(" \u{0000} ").unwrap(), r#"" \u0000 ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{0001} ").unwrap(), r#"" \u0001 ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{0007} ").unwrap(), r#"" \u0007 ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{000e} ").unwrap(), r#"" \u000E ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{001D} ").unwrap(), r#"" \u001D ""#);
-        assert_eq!(&*crate::to_string::<N, _>(" \u{001f} ").unwrap(), r#"" \u001F ""#);
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0000} ").unwrap(),
+            r#"" \u0000 ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0001} ").unwrap(),
+            r#"" \u0001 ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0007} ").unwrap(),
+            r#"" \u0007 ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000e} ").unwrap(),
+            r#"" \u000E ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{001D} ").unwrap(),
+            r#"" \u001D ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{001f} ").unwrap(),
+            r#"" \u001F ""#
+        );
     }
 
     #[test]
