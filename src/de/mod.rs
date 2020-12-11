@@ -5,7 +5,7 @@ use core::{fmt, str};
 
 use serde::de::{self, Visitor};
 
-use self::enum_::UnitVariantAccess;
+use self::enum_::{UnitVariantAccess, VariantAccess};
 use self::map::MapAccess;
 use self::seq::SeqAccess;
 
@@ -18,6 +18,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 /// This type represents all possible errors that can occur when deserializing JSON data
 #[derive(Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Error {
     /// EOF while parsing a list.
     EofWhileParsingList,
@@ -73,9 +74,6 @@ pub enum Error {
     /// Error with a custom message that was preserved.
     #[cfg(feature = "custom-error-messages")]
     CustomErrorWithMessage(heapless::String<heapless::consts::U64>),
-
-    #[doc(hidden)]
-    __Extensible,
 }
 
 #[cfg(feature = "std")]
@@ -498,28 +496,40 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    /// Unsupported. Use a more specific deserialize_* method
-    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        let peek = match self.parse_whitespace() {
+            Some(b) => b,
+            None => {
+                return Err(Error::EofWhileParsingValue);
+            }
+        };
+
+        match peek {
+            b'n' => {
+                self.eat_char();
+                self.parse_ident(b"ull")?;
+                visitor.visit_unit()
+            }
+            _ => Err(Error::InvalidType),
+        }
     }
 
-    /// Unsupported. Use a more specific deserialize_* method
-    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_unit(visitor)
     }
 
     /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
@@ -600,6 +610,17 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'"' => visitor.visit_enum(UnitVariantAccess::new(self)),
+            b'{' => {
+                self.eat_char();
+                let value = visitor.visit_enum(VariantAccess::new(self))?;
+                match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+                    b'}' => {
+                        self.eat_char();
+                        Ok(value)
+                    }
+                    _ => Err(Error::ExpectedSomeValue),
+                }
+            }
             _ => Err(Error::ExpectedSomeValue),
         }
     }
@@ -959,6 +980,41 @@ mod tests {
         // out of range
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 256 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
+    }
+
+    #[test]
+    fn test_unit() {
+        assert_eq!(crate::from_str::<()>(r#"null"#), Ok(((), 4)));
+    }
+
+    #[test]
+    fn newtype_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct A(pub u32);
+
+        assert_eq!(crate::from_str::<A>(r#"54"#), Ok((A(54), 2)));
+    }
+
+    #[test]
+    fn test_newtype_variant() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        enum A {
+            A(u32),
+        }
+        let a = A::A(54);
+        let x = crate::from_str::<A>(r#"{"A":54}"#);
+        assert_eq!(x, Ok((a, 8)));
+    }
+
+    #[test]
+    fn test_struct_variant() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        enum A {
+            A { x: u32, y: u16 },
+        }
+        let a = A::A { x: 54, y: 720 };
+        let x = crate::from_str::<A>(r#"{"A": {"x":54,"y":720 } }"#);
+        assert_eq!(x, Ok((a, 25)));
     }
 
     #[test]
