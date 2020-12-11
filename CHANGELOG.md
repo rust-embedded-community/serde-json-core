@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Changed deserializations to return the number of bytes used
 - Changed deserializer and serializer to handle escaped strings
 - Changed deserializer to handle whitespaces before sequence
+- Raised MSRV to 1.40.0 in order to use `non_exhaustive`
 
 ## [v0.1.0] - 2019-11-17
 
