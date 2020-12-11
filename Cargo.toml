@@ -8,7 +8,7 @@ keywords = ["serde", "json"]
 license = "MIT OR Apache-2.0"
 name = "serde-json-core"
 readme = "README.md"
-repository = "https://japaric.github.io/serde-json-core/serde_json_core"
+repository = "https://github.com/rust-embedded-community/serde-json-core"
 version = "0.1.0"
 
 [dependencies]
@@ -24,6 +24,3 @@ serde_derive = "1.0.80"
 [features]
 custom-error-messages = []
 std = ["serde/std"]
-
-[badges]
-maintenance = { status = "looking-for-maintainer" }
