@@ -58,7 +58,10 @@ pub(crate) struct Serializer<'a> {
 
 impl<'a> Serializer<'a> {
     fn new(buf: &'a mut [u8]) -> Self {
-        Serializer { buf, current_length: 0 }
+        Serializer {
+            buf,
+            current_length: 0,
+        }
     }
 
     fn push(&mut self, c: u8) -> Result<()> {
@@ -152,6 +155,20 @@ macro_rules! serialize_fmt {
     }};
 }
 
+/// Upper-case hex for value in 0..16, encoded as ASCII bytes
+fn hex_4bit(c: u8) -> u8 {
+    if c <= 9 {
+        0x30 + c
+    } else {
+        0x41 + (c - 10)
+    }
+}
+
+/// Upper-case hex for value in 0..256, encoded as ASCII bytes
+fn hex(c: u8) -> (u8, u8) {
+    (hex_4bit(c >> 4), hex_4bit(c & 0x0F))
+}
+
 impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     type Ok = ();
     type Error = Error;
@@ -225,7 +242,65 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
         self.push(b'"')?;
-        self.extend_from_slice(v.as_bytes())?;
+
+        // Do escaping according to "6. MUST represent all strings (including object member names) in
+        // their minimal-length UTF-8 encoding": https://gibson042.github.io/canonicaljson-spec/
+        //
+        // We don't need to escape lone surrogates because surrogate pairs do not exist in valid UTF-8,
+        // even if they can exist in JSON or JavaScript strings (UCS-2 based). As a result, lone surrogates
+        // cannot exist in a Rust String. If they do, the bug is in the String constructor.
+        // An excellent explanation is available at https://www.youtube.com/watch?v=HhIEDWmQS3w
+
+        // Temporary storage for encoded a single char.
+        // A char is up to 4 bytes long wehn encoded to UTF-8.
+        let mut encoding_tmp = [0u8; 4];
+
+        for c in v.chars() {
+            match c {
+                '\\' => {
+                    self.push(b'\\')?;
+                    self.push(b'\\')?;
+                }
+                '"' => {
+                    self.push(b'\\')?;
+                    self.push(b'"')?;
+                }
+                '\u{0008}' => {
+                    self.push(b'\\')?;
+                    self.push(b'b')?;
+                }
+                '\u{0009}' => {
+                    self.push(b'\\')?;
+                    self.push(b't')?;
+                }
+                '\u{000A}' => {
+                    self.push(b'\\')?;
+                    self.push(b'n')?;
+                }
+                '\u{000C}' => {
+                    self.push(b'\\')?;
+                    self.push(b'f')?;
+                }
+                '\u{000D}' => {
+                    self.push(b'\\')?;
+                    self.push(b'r')?;
+                }
+                '\u{0000}'..='\u{001F}' => {
+                    self.push(b'\\')?;
+                    self.push(b'u')?;
+                    self.push(b'0')?;
+                    self.push(b'0')?;
+                    let (hex1, hex2) = hex(c as u8);
+                    self.push(hex1)?;
+                    self.push(hex2)?;
+                }
+                _ => {
+                    let encoded = c.encode_utf8(&mut encoding_tmp as &mut [u8]);
+                    self.extend_from_slice(encoded.as_bytes())?;
+                }
+            }
+        }
+
         self.push(b'"')
     }
 
@@ -502,6 +577,72 @@ mod tests {
     #[test]
     fn str() {
         assert_eq!(&*crate::to_string::<N, _>("hello").unwrap(), r#""hello""#);
+        assert_eq!(&*crate::to_string::<N, _>("").unwrap(), r#""""#);
+
+        // Characters unescaped if possible
+        assert_eq!(&*crate::to_string::<N, _>("ä").unwrap(), r#""ä""#);
+        assert_eq!(&*crate::to_string::<N, _>("৬").unwrap(), r#""৬""#);
+        // assert_eq!(&*crate::to_string::<N, _>("\u{A0}").unwrap(), r#"" ""#); // non-breaking space
+        assert_eq!(&*crate::to_string::<N, _>("ℝ").unwrap(), r#""ℝ""#); // 3 byte character
+        assert_eq!(&*crate::to_string::<N, _>("💣").unwrap(), r#""💣""#); // 4 byte character
+
+        // " and \ must be escaped
+        assert_eq!(
+            &*crate::to_string::<N, _>("foo\"bar").unwrap(),
+            r#""foo\"bar""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>("foo\\bar").unwrap(),
+            r#""foo\\bar""#
+        );
+
+        // \b, \t, \n, \f, \r must be escaped in their two-character escaping
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0008} ").unwrap(),
+            r#"" \b ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0009} ").unwrap(),
+            r#"" \t ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000A} ").unwrap(),
+            r#"" \n ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000C} ").unwrap(),
+            r#"" \f ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000D} ").unwrap(),
+            r#"" \r ""#
+        );
+
+        // U+0000 through U+001F is escaped using six-character \u00xx uppercase hexadecimal escape sequences
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0000} ").unwrap(),
+            r#"" \u0000 ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0001} ").unwrap(),
+            r#"" \u0001 ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{0007} ").unwrap(),
+            r#"" \u0007 ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{000e} ").unwrap(),
+            r#"" \u000E ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{001D} ").unwrap(),
+            r#"" \u001D ""#
+        );
+        assert_eq!(
+            &*crate::to_string::<N, _>(" \u{001f} ").unwrap(),
+            r#"" \u001F ""#
+        );
     }
 
     #[test]

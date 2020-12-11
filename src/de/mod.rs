@@ -99,10 +99,10 @@ impl<'a> Deserializer<'a> {
         self.index += 1;
     }
 
-    fn end(&mut self) -> Result<()> {
+    fn end(&mut self) -> Result<usize> {
         match self.parse_whitespace() {
             Some(_) => Err(Error::TrailingCharacters),
-            None => Ok(()),
+            None => Ok(self.index),
         }
     }
 
@@ -175,10 +175,37 @@ impl<'a> Deserializer<'a> {
         loop {
             match self.peek() {
                 Some(b'"') => {
-                    let end = self.index;
-                    self.eat_char();
-                    return str::from_utf8(&self.slice[start..end])
-                        .map_err(|_| Error::InvalidUnicodeCodePoint);
+                    // Counts the number of backslashes in front of the current index.
+                    //
+                    // "some string with \\\" included."
+                    //                  ^^^^^
+                    //                  |||||
+                    //       loop run:  4321|
+                    //                      |
+                    //                   `index`
+                    //
+                    // Since we only get in this code branch if we found a " starting the string and `index` is greater
+                    // than the start position, we know the loop will end no later than this point.
+                    let leading_backslashes = |index: usize| -> usize {
+                        let mut count = 0;
+                        loop {
+                            if self.slice[index - count - 1] == b'\\' {
+                                count += 1;
+                            } else {
+                                return count;
+                            }
+                        }
+                    };
+
+                    let is_escaped = leading_backslashes(self.index) % 2 == 1;
+                    if is_escaped {
+                        self.eat_char(); // just continue
+                    } else {
+                        let end = self.index;
+                        self.eat_char();
+                        return str::from_utf8(&self.slice[start..end])
+                            .map_err(|_| Error::InvalidUnicodeCodePoint);
+                    }
                 }
                 Some(_) => self.eat_char(),
                 None => return Err(Error::EofWhileParsingString),
@@ -499,7 +526,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match self.peek().ok_or(Error::EofWhileParsingValue)? {
+        match self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
             b'[' => {
                 self.eat_char();
                 let ret = visitor.visit_seq(SeqAccess::new(self))?;
@@ -678,19 +705,20 @@ impl fmt::Display for Error {
 }
 
 /// Deserializes an instance of type `T` from bytes of JSON text
-pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<T>
+/// Returns the value and the number of bytes consumed in the process
+pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
     let mut de = Deserializer::new(v);
     let value = de::Deserialize::deserialize(&mut de)?;
-    de.end()?;
+    let length = de.end()?;
 
-    Ok(value)
+    Ok((value, length))
 }
 
 /// Deserializes an instance of type T from a string of JSON text
-pub fn from_str<'a, T>(s: &'a str) -> Result<T>
+pub fn from_str<'a, T>(s: &'a str) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
@@ -713,8 +741,8 @@ mod tests {
 
     #[test]
     fn array() {
-        assert_eq!(crate::from_str::<[i32; 0]>("[]"), Ok([]));
-        assert_eq!(crate::from_str("[0, 1, 2]"), Ok([0, 1, 2]));
+        assert_eq!(crate::from_str::<[i32; 0]>("[]"), Ok(([], 2)));
+        assert_eq!(crate::from_str("[0, 1, 2]"), Ok(([0, 1, 2], 9)));
 
         // errors
         assert!(crate::from_str::<[i32; 2]>("[0, 1,]").is_err());
@@ -722,13 +750,13 @@ mod tests {
 
     #[test]
     fn bool() {
-        assert_eq!(crate::from_str("true"), Ok(true));
-        assert_eq!(crate::from_str(" true"), Ok(true));
-        assert_eq!(crate::from_str("true "), Ok(true));
+        assert_eq!(crate::from_str("true"), Ok((true, 4)));
+        assert_eq!(crate::from_str(" true"), Ok((true, 5)));
+        assert_eq!(crate::from_str("true "), Ok((true, 5)));
 
-        assert_eq!(crate::from_str("false"), Ok(false));
-        assert_eq!(crate::from_str(" false"), Ok(false));
-        assert_eq!(crate::from_str("false "), Ok(false));
+        assert_eq!(crate::from_str("false"), Ok((false, 5)));
+        assert_eq!(crate::from_str(" false"), Ok((false, 6)));
+        assert_eq!(crate::from_str("false "), Ok((false, 6)));
 
         // errors
         assert!(crate::from_str::<bool>("true false").is_err());
@@ -737,14 +765,54 @@ mod tests {
 
     #[test]
     fn enum_clike() {
-        assert_eq!(crate::from_str(r#" "boolean" "#), Ok(Type::Boolean));
-        assert_eq!(crate::from_str(r#" "number" "#), Ok(Type::Number));
-        assert_eq!(crate::from_str(r#" "thing" "#), Ok(Type::Thing));
+        assert_eq!(crate::from_str(r#" "boolean" "#), Ok((Type::Boolean, 11)));
+        assert_eq!(crate::from_str(r#" "number" "#), Ok((Type::Number, 10)));
+        assert_eq!(crate::from_str(r#" "thing" "#), Ok((Type::Thing, 9)));
     }
 
     #[test]
     fn str() {
-        assert_eq!(crate::from_str(r#" "hello" "#), Ok("hello"));
+        assert_eq!(crate::from_str(r#" "hello" "#), Ok(("hello", 9)));
+        assert_eq!(crate::from_str(r#" "" "#), Ok(("", 4)));
+        assert_eq!(crate::from_str(r#" " " "#), Ok((" ", 5)));
+        assert_eq!(crate::from_str(r#" "👏" "#), Ok(("👏", 8)));
+
+        // no unescaping is done (as documented as a known issue in lib.rs)
+        assert_eq!(crate::from_str(r#" "hel\tlo" "#), Ok(("hel\\tlo", 11)));
+        assert_eq!(crate::from_str(r#" "hello \\" "#), Ok(("hello \\\\", 12)));
+
+        // escaped " in the string content
+        assert_eq!(crate::from_str(r#" "foo\"bar" "#), Ok((r#"foo\"bar"#, 12)));
+        assert_eq!(
+            crate::from_str(r#" "foo\\\"bar" "#),
+            Ok((r#"foo\\\"bar"#, 14))
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo\"\"bar" "#),
+            Ok((r#"foo\"\"bar"#, 14))
+        );
+        assert_eq!(crate::from_str(r#" "\"bar" "#), Ok((r#"\"bar"#, 9)));
+        assert_eq!(crate::from_str(r#" "foo\"" "#), Ok((r#"foo\""#, 9)));
+        assert_eq!(crate::from_str(r#" "\"" "#), Ok((r#"\""#, 6)));
+
+        // non-excaped " preceded by backslashes
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\" "#),
+            Ok((r#"foo bar\\"#, 13))
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\" "#),
+            Ok((r#"foo bar\\\\"#, 15))
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\\\" "#),
+            Ok((r#"foo bar\\\\\\"#, 17))
+        );
+        assert_eq!(
+            crate::from_str(r#" "foo bar\\\\\\\\" "#),
+            Ok((r#"foo bar\\\\\\\\"#, 19))
+        );
+        assert_eq!(crate::from_str(r#" "\\" "#), Ok((r#"\\"#, 6)));
     }
 
     #[test]
@@ -754,10 +822,13 @@ mod tests {
             led: bool,
         }
 
-        assert_eq!(crate::from_str(r#"{ "led": true }"#), Ok(Led { led: true }));
+        assert_eq!(
+            crate::from_str(r#"{ "led": true }"#),
+            Ok((Led { led: true }, 15))
+        );
         assert_eq!(
             crate::from_str(r#"{ "led": false }"#),
-            Ok(Led { led: false })
+            Ok((Led { led: false }, 16))
         );
     }
 
@@ -770,17 +841,17 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -17 }"#),
-            Ok(Temperature { temperature: -17 })
+            Ok((Temperature { temperature: -17 }, 22))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -0 }"#),
-            Ok(Temperature { temperature: -0 })
+            Ok((Temperature { temperature: -0 }, 21))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 0 }"#),
-            Ok(Temperature { temperature: 0 })
+            Ok((Temperature { temperature: 0 }, 20))
         );
 
         // out of range
@@ -797,33 +868,39 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -17.2 }"#),
-            Ok(Temperature { temperature: -17.2 })
+            Ok((Temperature { temperature: -17.2 }, 24))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -0.0 }"#),
-            Ok(Temperature { temperature: -0. })
+            Ok((Temperature { temperature: -0. }, 23))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -2.1e-3 }"#),
-            Ok(Temperature {
-                temperature: -2.1e-3
-            })
+            Ok((
+                Temperature {
+                    temperature: -2.1e-3
+                },
+                26
+            ))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -3 }"#),
-            Ok(Temperature { temperature: -3. })
+            Ok((Temperature { temperature: -3. }, 21))
         );
 
         use core::f32;
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": -1e500 }"#),
-            Ok(Temperature {
-                temperature: f32::NEG_INFINITY
-            })
+            Ok((
+                Temperature {
+                    temperature: f32::NEG_INFINITY
+                },
+                25
+            ))
         );
 
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
@@ -843,17 +920,23 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "description": "An ambient temperature sensor" }"#),
-            Ok(Property {
-                description: Some("An ambient temperature sensor"),
-            })
+            Ok((
+                Property {
+                    description: Some("An ambient temperature sensor"),
+                },
+                50
+            ))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "description": null }"#),
-            Ok(Property { description: None })
+            Ok((Property { description: None }, 23))
         );
 
-        assert_eq!(crate::from_str(r#"{}"#), Ok(Property { description: None }));
+        assert_eq!(
+            crate::from_str(r#"{}"#),
+            Ok((Property { description: None }, 2))
+        );
     }
 
     #[test]
@@ -865,12 +948,12 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20 }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 21))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 0 }"#),
-            Ok(Temperature { temperature: 0 })
+            Ok((Temperature { temperature: 0 }, 20))
         );
 
         // out of range
@@ -884,8 +967,8 @@ mod tests {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Xy(i8, i8);
 
-        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
-        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok((Xy(10, 20), 8)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok((Xy(10, -20), 9)));
 
         // wrong number of args
         assert_eq!(
@@ -904,8 +987,8 @@ mod tests {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Xy(i8, i8);
 
-        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok(Xy(10, 20)));
-        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok(Xy(10, -20)));
+        assert_eq!(crate::from_str(r#"[10, 20]"#), Ok((Xy(10, 20), 8)));
+        assert_eq!(crate::from_str(r#"[10, -20]"#), Ok((Xy(10, -20), 9)));
 
         // wrong number of args
         assert_eq!(
@@ -929,31 +1012,31 @@ mod tests {
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20, "high": 80, "low": -10, "updated": true }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 62))
         );
 
         assert_eq!(
             crate::from_str(
                 r#"{ "temperature": 20, "conditions": "windy", "forecast": "cloudy" }"#
             ),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 66))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20, "hourly_conditions": ["windy", "rainy"] }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 62))
         );
 
         assert_eq!(
             crate::from_str(
                 r#"{ "temperature": 20, "source": { "station": "dock", "sensors": ["front", "back"] } }"#
             ),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 84))
         );
 
         assert_eq!(
             crate::from_str(r#"{ "temperature": 20, "invalid": this-is-ignored }"#),
-            Ok(Temperature { temperature: 20 })
+            Ok((Temperature { temperature: 20 }, 49))
         );
 
         assert_eq!(
@@ -996,7 +1079,6 @@ mod tests {
 
     // See https://iot.mozilla.org/wot/#thing-resource
     #[test]
-    #[ignore]
     fn wot() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Thing<'a> {
@@ -1029,52 +1111,55 @@ mod tests {
         assert_eq!(
             crate::from_str::<Thing<'_>>(
                 r#"
-{
-  "type": "thing",
-  "properties": {
-    "temperature": {
-      "type": "number",
-      "unit": "celsius",
-      "description": "An ambient temperature sensor",
-      "href": "/properties/temperature"
-    },
-    "humidity": {
-      "type": "number",
-      "unit": "percent",
-      "href": "/properties/humidity"
-    },
-    "led": {
-      "type": "boolean",
-      "description": "A red LED",
-      "href": "/properties/led"
-    }
-  }
-}
-"#
+                    {
+                    "type": "thing",
+                    "properties": {
+                        "temperature": {
+                        "type": "number",
+                        "unit": "celsius",
+                        "description": "An ambient temperature sensor",
+                        "href": "/properties/temperature"
+                        },
+                        "humidity": {
+                        "type": "number",
+                        "unit": "percent",
+                        "href": "/properties/humidity"
+                        },
+                        "led": {
+                        "type": "boolean",
+                        "description": "A red LED",
+                        "href": "/properties/led"
+                        }
+                    }
+                    }
+                    "#
             ),
-            Ok(Thing {
-                properties: Properties {
-                    temperature: Property {
-                        ty: Type::Number,
-                        unit: Some("celcius"),
-                        description: Some("An ambient temperature sensor"),
-                        href: "/properties/temperature",
+            Ok((
+                Thing {
+                    properties: Properties {
+                        temperature: Property {
+                            ty: Type::Number,
+                            unit: Some("celsius"),
+                            description: Some("An ambient temperature sensor"),
+                            href: "/properties/temperature",
+                        },
+                        humidity: Property {
+                            ty: Type::Number,
+                            unit: Some("percent"),
+                            description: None,
+                            href: "/properties/humidity",
+                        },
+                        led: Property {
+                            ty: Type::Boolean,
+                            unit: None,
+                            description: Some("A red LED"),
+                            href: "/properties/led",
+                        },
                     },
-                    humidity: Property {
-                        ty: Type::Number,
-                        unit: Some("percent"),
-                        description: None,
-                        href: "/properties/humidity",
-                    },
-                    led: Property {
-                        ty: Type::Boolean,
-                        unit: None,
-                        description: Some("A red LED"),
-                        href: "/properties/led",
-                    },
+                    ty: Type::Thing,
                 },
-                ty: Type::Thing,
-            })
+                852
+            ))
         )
     }
 }
