@@ -336,11 +336,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self.serialize_str(variant)
     }
 
-    fn serialize_newtype_struct<T: ?Sized>(
-        self,
-        _name: &'static str,
-        value: &T,
-    ) -> Result<Self::Ok>
+    fn serialize_newtype_struct<T: ?Sized>(self, _name: &'static str, value: &T) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
@@ -794,6 +790,9 @@ mod tests {
         }
         let a = A::A { x: 54, y: 720 };
 
-        assert_eq!(&*crate::to_string::<N, _>(&a).unwrap(), r#"{"A":{"x":54,"y":720}}"#);
+        assert_eq!(
+            &*crate::to_string::<N, _>(&a).unwrap(),
+            r#"{"A":{"x":54,"y":720}}"#
+        );
     }
 }
