@@ -4,17 +4,16 @@
 
 [`serde-json`]: https://crates.io/crates/serde_json
 
-# Status
+This project is developed and maintained by the [rust-embedded-community].
 
-This crate is currently being passively maintained by [@japaric]. I (@japaric)
-will be merging PRs (bug fixes and features) as they appear without any
-long-term / design consideration. If you would like to take over the steering
-wheel (i.e. take ownership of this crate) send me an e-mail (see my GitHub
-profile).
+[rust-embedded-community]: https://github.com/rust-embedded-community/meta
 
-[@japaric]: https://github.com/japaric
+## [Documentation](https://docs.rs/serde-json-core)
 
-## [Documentation](https://japaric.github.io/serde-json-core/serde_json_core)
+## Minimum Supported Rust Version (MSRV)
+
+This crate is guaranteed to compile on stable Rust 1.40.0 and up. It *might*
+compile with older versions but that may change in any new patch release.
 
 ## License
 
