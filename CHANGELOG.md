@@ -6,7 +6,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
-...
+### Changed
+- Floating point numbers terminated by EOF may now be deserialized
 
 ## [v0.2.0] - 2020-12-11
 ### Added
