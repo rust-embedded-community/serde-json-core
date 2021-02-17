@@ -312,23 +312,22 @@ macro_rules! deserialize_signed {
 macro_rules! deserialize_fromstr {
     ($self:ident, $visitor:ident, $typ:ident, $visit_fn:ident, $pattern:expr) => {{
         let start = $self.index;
-        loop {
-            match $self.peek() {
-                Some(c) => {
-                    if $pattern.iter().find(|&&d| d == c).is_some() {
-                        $self.eat_char();
-                    } else {
-                        let s = unsafe {
-                            // already checked that it contains only ascii
-                            str::from_utf8_unchecked(&$self.slice[start..$self.index])
-                        };
-                        let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
-                        return $visitor.$visit_fn(v);
-                    }
-                }
-                None => return Err(Error::EofWhileParsingNumber),
+        while $self.peek().is_some() {
+            let c = $self.peek().unwrap();
+            if $pattern.iter().find(|&&d| d == c).is_some() {
+                $self.eat_char();
+            } else {
+                break;
             }
         }
+
+        // Note(unsafe): We already checked that it only contains ascii. This is only true if the
+        // caller has guaranteed that `pattern` contains only ascii characters.
+        let s = unsafe { str::from_utf8_unchecked(&$self.slice[start..$self.index]) };
+
+        let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
+
+        $visitor.$visit_fn(v)
     }};
 }
 
@@ -782,6 +781,24 @@ mod tests {
         // errors
         assert!(crate::from_str::<bool>("true false").is_err());
         assert!(crate::from_str::<bool>("tru").is_err());
+    }
+
+    #[test]
+    fn floating_point() {
+        assert_eq!(crate::from_str("5.0"), Ok((5.0, 3)));
+        assert_eq!(crate::from_str("1"), Ok((1.0, 1)));
+        assert_eq!(crate::from_str("1e5"), Ok((1e5, 3)));
+        assert!(crate::from_str::<f32>("a").is_err());
+        assert!(crate::from_str::<f32>(",").is_err());
+    }
+
+    #[test]
+    fn integer() {
+        assert_eq!(crate::from_str("5"), Ok((5, 1)));
+        assert_eq!(crate::from_str("101"), Ok((101, 3)));
+        assert!(crate::from_str::<u16>("1e5").is_err());
+        assert!(crate::from_str::<u8>("256").is_err());
+        assert!(crate::from_str::<f32>(",").is_err());
     }
 
     #[test]
