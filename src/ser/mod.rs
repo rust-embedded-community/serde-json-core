@@ -798,10 +798,10 @@ mod tests {
 
     #[test]
     fn test_serialize_bytes() {
-        pub struct SimpleDecimal(f32);
-        
         use core::fmt::Write;
         use heapless::{consts::U48, String};
+
+        pub struct SimpleDecimal(f32);
 
         impl serde::Serialize for SimpleDecimal {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -814,13 +814,13 @@ mod tests {
             }
         }
 
-        let sd1 =  SimpleDecimal(1.55555);
+        let sd1 = SimpleDecimal(1.55555);
         assert_eq!(&*crate::to_string::<N, _>(&sd1).unwrap(), r#"1.56"#);
-        
-        let sd2 =  SimpleDecimal(0.00);
+
+        let sd2 = SimpleDecimal(0.000);
         assert_eq!(&*crate::to_string::<N, _>(&sd2).unwrap(), r#"0.00"#);
-        
-        let sd3 =  SimpleDecimal(22222.777777);
+
+        let sd3 = SimpleDecimal(22222.777777);
         assert_eq!(&*crate::to_string::<N, _>(&sd3).unwrap(), r#"22222.78"#);
     }
 }
