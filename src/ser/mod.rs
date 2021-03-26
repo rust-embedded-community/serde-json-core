@@ -304,8 +304,8 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self.push(b'"')
     }
 
-    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
+        self.extend_from_slice(v)
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
