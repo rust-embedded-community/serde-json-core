@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 - Floating point numbers terminated by EOF may now be deserialized
 - [ryu](https://github.com/dtolnay/ryu) is used to serialize `f32` and `f64`
+- Added missing implementation for `serialize_bytes` method
 
 ## [v0.2.0] - 2020-12-11
 ### Added
