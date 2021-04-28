@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - [ryu](https://github.com/dtolnay/ryu) is used to serialize `f32` and `f64`
 - Added missing implementation for `serialize_bytes` method
 
+### Breaking
+- Heapless dependency updated to 0.6.1 - publicly exporting heapless for external use.
+
 ## [v0.2.0] - 2020-12-11
 ### Added
 - Support for serialization into slices
