@@ -6,10 +6,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Added
+- `heapless` is now publicly exported
+- Added new `serialize_bytes` method
+
 ### Changed
 - Floating point numbers terminated by EOF may now be deserialized
 - [ryu](https://github.com/dtolnay/ryu) is used to serialize `f32` and `f64`
-- Added missing implementation for `serialize_bytes` method
+- [breaking-change] Heapless dependency updated to 0.6.1
 
 ## [v0.2.0] - 2020-12-11
 ### Added
@@ -38,4 +42,3 @@ Initial release
 [Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.2.0...HEAD
 [v0.2.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/rust-embedded-community/serde-json-core/releases/tag/v0.1.0
-

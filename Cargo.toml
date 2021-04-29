@@ -12,7 +12,7 @@ repository = "https://github.com/rust-embedded-community/serde-json-core"
 version = "0.2.0"
 
 [dependencies]
-heapless = "0.5.6"
+heapless = "0.6.1"
 ryu = "1.0.5"
 
 [dependencies.serde]
