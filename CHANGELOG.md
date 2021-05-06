@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-...
+### Added
+
+- Support for opting out of heapless integration
 
 ## [v0.3.0] - 2021-04-29
 ### Added
