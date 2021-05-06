@@ -5,6 +5,7 @@ use core::fmt;
 use serde::ser;
 use serde::ser::SerializeStruct as _;
 
+#[cfg(feature = "heapless")]
 use heapless::{String, Vec};
 
 use self::map::SerializeMap;
@@ -423,6 +424,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
 }
 
 /// Serializes the given data structure as a string of JSON text
+#[cfg(feature = "heapless")]
 pub fn to_string<B, T>(value: &T) -> Result<String<B>>
 where
     B: heapless::ArrayLength<u8>,
@@ -432,6 +434,7 @@ where
 }
 
 /// Serializes the given data structure as a JSON byte vector
+#[cfg(feature = "heapless")]
 pub fn to_vec<B, T>(value: &T) -> Result<Vec<u8, B>>
 where
     B: heapless::ArrayLength<u8>,
