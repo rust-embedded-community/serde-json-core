@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- [breaking-change] use `const_generics` in `to_string()` and `to_vec()` functions.
+- [breaking-change] update to `heapless` `0.7`.
+
 ### Added
 
 - Support for opting out of heapless integration
