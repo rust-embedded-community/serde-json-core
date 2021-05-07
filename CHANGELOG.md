@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - [breaking-change] use `const_generics` in `to_string()` and `to_vec()` functions.
 - [breaking-change] update to `heapless` `0.7`.
+- [breaking-change] increase MSRV to Rust `1.51.0` due to `const_generics`.
 
 ### Added
 
