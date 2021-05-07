@@ -50,7 +50,7 @@
 //!
 //! # Minimum Supported Rust Version (MSRV)
 //!
-//! This crate is guaranteed to compile on stable Rust 1.40.0 and up. It *might* compile with older
+//! This crate is guaranteed to compile on stable Rust 1.51.0 and up. It *might* compile with older
 //! versions but that may change in any new patch release.
 
 #![deny(missing_docs)]
