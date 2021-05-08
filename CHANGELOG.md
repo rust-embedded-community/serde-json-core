@@ -7,15 +7,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.0] - 2021-05-08
+
+### Added
+
+- Support for opting out of heapless integration
+
 ### Changed
 
 - [breaking-change] use `const_generics` in `to_string()` and `to_vec()` functions.
 - [breaking-change] update to `heapless` `0.7`.
 - [breaking-change] increase MSRV to Rust `1.51.0` due to `const_generics`.
-
-### Added
-
-- Support for opting out of heapless integration
 
 ## [v0.3.0] - 2021-04-29
 ### Added
@@ -51,7 +53,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 Initial release
 
-[Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.4.0...HEAD
+[v0.4.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/rust-embedded-community/serde-json-core/releases/tag/v0.1.0
