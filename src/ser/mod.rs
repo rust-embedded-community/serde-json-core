@@ -1,6 +1,6 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::{fmt, mem, str};
+use core::{fmt, str};
 
 use serde::ser;
 use serde::ser::SerializeStruct as _;
@@ -91,7 +91,7 @@ impl<'a> Serializer<'a> {
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
     ($self:ident, $N:expr, $v:expr) => {{
-        let mut buf: [u8; $N] = unsafe { mem::MaybeUninit::uninit().assume_init() };
+        let mut buf: [u8; $N] = unsafe { super::uninitialized() };
 
         let mut v = $v;
         let mut i = $N - 1;
@@ -121,7 +121,7 @@ macro_rules! serialize_signed {
             (false, v as $uxx)
         };
 
-        let mut buf: [u8; $N] = unsafe { mem::MaybeUninit::uninit().assume_init() };
+        let mut buf: [u8; $N] = unsafe { super::uninitialized() };
         let mut i = $N - 1;
         loop {
             buf[i] = (v % 10) as u8 + b'0';
