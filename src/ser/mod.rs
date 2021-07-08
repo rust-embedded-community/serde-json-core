@@ -1,6 +1,10 @@
 //! Serialize a Rust data structure into JSON data
 
-use core::{fmt, str};
+use core::{
+    fmt,
+    mem::{self, MaybeUninit},
+    str,
+};
 
 use serde::ser;
 use serde::ser::SerializeStruct as _;
@@ -91,20 +95,22 @@ impl<'a> Serializer<'a> {
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
     ($self:ident, $N:expr, $v:expr) => {{
-        let mut buf: [u8; $N] = unsafe { super::uninitialized() };
-
-        let mut v = $v;
         let mut i = $N - 1;
-        loop {
-            buf[i] = (v % 10) as u8 + b'0';
-            v /= 10;
+        let mut v = $v;
+        let buf = {
+            let mut buf: [MaybeUninit<u8>; $N] = unsafe { MaybeUninit::uninit().assume_init() };
+            loop {
+                buf[i] = MaybeUninit::new((v % 10) as u8 + b'0');
+                v /= 10;
 
-            if v == 0 {
-                break;
-            } else {
-                i -= 1;
+                if v == 0 {
+                    break;
+                } else {
+                    i -= 1;
+                }
             }
-        }
+            unsafe { mem::transmute::<_, [u8; $N]>(buf) }
+        };
 
         $self.extend_from_slice(&buf[i..])
     }};
@@ -121,18 +127,21 @@ macro_rules! serialize_signed {
             (false, v as $uxx)
         };
 
-        let mut buf: [u8; $N] = unsafe { super::uninitialized() };
         let mut i = $N - 1;
-        loop {
-            buf[i] = (v % 10) as u8 + b'0';
-            v /= 10;
+        let mut buf = {
+            let mut buf: [MaybeUninit<u8>; $N] = unsafe { MaybeUninit::uninit().assume_init() };
+            loop {
+                buf[i] = MaybeUninit::new((v % 10) as u8 + b'0');
+                v /= 10;
 
-            i -= 1;
+                i -= 1;
 
-            if v == 0 {
-                break;
+                if v == 0 {
+                    break;
+                }
             }
-        }
+            unsafe { mem::transmute::<_, [u8; $N]>(buf) }
+        };
 
         if signed {
             buf[i] = b'-';
