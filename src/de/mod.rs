@@ -875,15 +875,12 @@ mod tests {
             point: [u32; 3],
         }
 
-        let (result, _consumed): (Test, _) =
-            crate::from_str(r#"{ "status": true, "point": [1,2,3] }"#).expect("it deserializes");
-
         assert_eq!(
-            result,
-            Test {
+            crate::from_str(r#"{ "status": true, "point": [1,2,3] }"#),
+            Ok((Test {
                 status: true,
                 point: [1_u32, 2, 3]
-            }
+            }, 36))
         );
     }
 
@@ -895,15 +892,12 @@ mod tests {
             point: (u32, u32, u32),
         }
 
-        let (result, _consumed): (Test, _) =
-            crate::from_str(r#"{ "status": true, "point": [1,2,3] }"#).expect("it deserializes");
-
         assert_eq!(
-            result,
-            Test {
+            crate::from_str(r#"{ "status": true, "point": [1,2,3] }"#),
+            Ok((Test {
                 status: true,
                 point: (1_u32, 2, 3)
-            }
+            }, 36))
         );
     }
 
