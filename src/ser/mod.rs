@@ -230,11 +230,19 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
-        serialize_ryu!(self, v)
+        if v.is_finite() {
+            serialize_ryu!(self, v)
+        } else {
+            self.serialize_none()
+        }
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
-        serialize_ryu!(self, v)
+        if v.is_finite() {
+            serialize_ryu!(self, v)
+        } else {
+            self.serialize_none()
+        }
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {
