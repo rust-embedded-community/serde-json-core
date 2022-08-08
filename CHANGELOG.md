@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Changed serialization of `f32`/`f64` that are `!is_finite()` (i.e. `NAN`, `INFINITY`,
+  `NEG_INFINITY`) to result in JSON `null`. This matches `serde_json` behavior.
+- Changed deserialization of JSON `null` where `f32`/`f64` is expected to result in
+  the respective `NAN`.
+
 ## [v0.4.0] - 2021-05-08
 
 ### Added

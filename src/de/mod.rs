@@ -948,11 +948,17 @@ mod tests {
             ))
         );
 
+        // NaNs will always compare unequal.
+        let (r, n): (Temperature, usize) = crate::from_str(r#"{ "temperature": null }"#).unwrap();
+        assert!(r.temperature.is_nan());
+        assert_eq!(n, 23);
+
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -2-2 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1 1 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 0.0. }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": ä }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": None }"#).is_err());
     }
 
     #[test]

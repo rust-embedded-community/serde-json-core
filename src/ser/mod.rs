@@ -708,6 +708,22 @@ mod tests {
             .unwrap(),
             r#"{"temperature":-2.3456788e-23}"#
         );
+
+        assert_eq!(
+            &*crate::to_string::<_, N>(&Temperature {
+                temperature: f32::NAN
+            })
+            .unwrap(),
+            r#"{"temperature":null}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<_, N>(&Temperature {
+                temperature: f32::NEG_INFINITY
+            })
+            .unwrap(),
+            r#"{"temperature":null}"#
+        );
     }
 
     #[test]
