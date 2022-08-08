@@ -230,11 +230,19 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
-        serialize_ryu!(self, v)
+        if v.is_finite() {
+            serialize_ryu!(self, v)
+        } else {
+            self.serialize_none()
+        }
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
-        serialize_ryu!(self, v)
+        if v.is_finite() {
+            serialize_ryu!(self, v)
+        } else {
+            self.serialize_none()
+        }
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {
@@ -345,7 +353,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_newtype_variant<T: ?Sized>(
-        mut self,
+        self,
         _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
@@ -355,7 +363,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         T: ser::Serialize,
     {
         self.push(b'{')?;
-        let mut s = SerializeStruct::new(&mut self);
+        let mut s = SerializeStruct::new(self);
         s.serialize_field(variant, value)?;
         s.end()?;
         Ok(())
@@ -699,6 +707,22 @@ mod tests {
             })
             .unwrap(),
             r#"{"temperature":-2.3456788e-23}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<_, N>(&Temperature {
+                temperature: f32::NAN
+            })
+            .unwrap(),
+            r#"{"temperature":null}"#
+        );
+
+        assert_eq!(
+            &*crate::to_string::<_, N>(&Temperature {
+                temperature: f32::NEG_INFINITY
+            })
+            .unwrap(),
+            r#"{"temperature":null}"#
         );
     }
 

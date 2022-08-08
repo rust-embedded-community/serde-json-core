@@ -311,23 +311,32 @@ macro_rules! deserialize_signed {
 
 macro_rules! deserialize_fromstr {
     ($self:ident, $visitor:ident, $typ:ident, $visit_fn:ident, $pattern:expr) => {{
-        let start = $self.index;
-        while $self.peek().is_some() {
-            let c = $self.peek().unwrap();
-            if $pattern.iter().find(|&&d| d == c).is_some() {
+        match $self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? {
+            b'n' => {
                 $self.eat_char();
-            } else {
-                break;
+                $self.parse_ident(b"ull")?;
+                $visitor.$visit_fn($typ::NAN)
+            }
+            _ => {
+                let start = $self.index;
+                while $self.peek().is_some() {
+                    let c = $self.peek().unwrap();
+                    if $pattern.iter().find(|&&d| d == c).is_some() {
+                        $self.eat_char();
+                    } else {
+                        break;
+                    }
+                }
+
+                // Note(unsafe): We already checked that it only contains ascii. This is only true if the
+                // caller has guaranteed that `pattern` contains only ascii characters.
+                let s = unsafe { str::from_utf8_unchecked(&$self.slice[start..$self.index]) };
+
+                let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
+
+                $visitor.$visit_fn(v)
             }
         }
-
-        // Note(unsafe): We already checked that it only contains ascii. This is only true if the
-        // caller has guaranteed that `pattern` contains only ascii characters.
-        let s = unsafe { str::from_utf8_unchecked(&$self.slice[start..$self.index]) };
-
-        let v = $typ::from_str(s).or(Err(Error::InvalidNumber))?;
-
-        $visitor.$visit_fn(v)
     }};
 }
 
@@ -423,7 +432,6 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
         deserialize_fromstr!(self, visitor, f32, visit_f32, b"0123456789+-.eE")
     }
 
@@ -431,7 +439,6 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
         deserialize_fromstr!(self, visitor, f64, visit_f64, b"0123456789+-.eE")
     }
 
@@ -941,11 +948,17 @@ mod tests {
             ))
         );
 
+        // NaNs will always compare unequal.
+        let (r, n): (Temperature, usize) = crate::from_str(r#"{ "temperature": null }"#).unwrap();
+        assert!(r.temperature.is_nan());
+        assert_eq!(n, 23);
+
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1e1e1 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": -2-2 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 1 1 }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": 0.0. }"#).is_err());
         assert!(crate::from_str::<Temperature>(r#"{ "temperature": ä }"#).is_err());
+        assert!(crate::from_str::<Temperature>(r#"{ "temperature": None }"#).is_err());
     }
 
     #[test]
