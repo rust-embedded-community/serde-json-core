@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `NEG_INFINITY`) to result in JSON `null`. This matches `serde_json` behavior.
 - Changed deserialization of JSON `null` where `f32`/`f64` is expected to result in
   the respective `NAN`.
+- [breaking-change] increase MSRV to Rust `1.55.0` due to `maybe_uninit_extra`.
 
 ## [v0.4.0] - 2021-05-08
 
