@@ -20,7 +20,7 @@ mod struct_;
 pub type Result<T> = ::core::result::Result<T, Error>;
 
 /// This type represents all possible errors that can occur when serializing JSON data
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 #[non_exhaustive]
 pub enum Error {
     /// Buffer is full

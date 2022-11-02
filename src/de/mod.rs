@@ -17,7 +17,8 @@ mod seq;
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// This type represents all possible errors that can occur when deserializing JSON data
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(not(feature = "custom-error-messages"), derive(Copy))]
 #[non_exhaustive]
 pub enum Error {
     /// EOF while parsing a list.
@@ -73,7 +74,7 @@ pub enum Error {
 
     /// Error with a custom message that was preserved.
     #[cfg(feature = "custom-error-messages")]
-    CustomErrorWithMessage(heapless::String<heapless::consts::U64>),
+    CustomErrorWithMessage(heapless::String<64>),
 }
 
 #[cfg(feature = "std")]
