@@ -71,8 +71,3 @@ pub use self::ser::{to_string, to_vec};
 
 #[cfg(feature = "heapless")]
 pub use heapless;
-
-#[allow(deprecated)]
-unsafe fn uninitialized<T>() -> T {
-    core::mem::uninitialized()
-}
