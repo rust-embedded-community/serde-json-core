@@ -40,13 +40,6 @@ impl From<u8> for Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        ""
-    }
-}
-
 impl serde::ser::StdError for Error {}
 
 impl fmt::Display for Error {

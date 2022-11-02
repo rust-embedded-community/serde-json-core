@@ -77,13 +77,6 @@ pub enum Error {
     CustomErrorWithMessage(heapless::String<64>),
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        ""
-    }
-}
-
 impl serde::de::StdError for Error {}
 
 pub(crate) struct Deserializer<'b> {
