@@ -4,7 +4,6 @@ categories = ["no-std"]
 description = "serde-json for no_std programs"
 documentation = "https://docs.rs/serde-json-core"
 edition = "2018"
-rust-version = "1.51.0"  # sync with CI
 keywords = ["serde", "json"]
 license = "MIT OR Apache-2.0"
 name = "serde-json-core"
