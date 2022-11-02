@@ -1093,6 +1093,46 @@ mod tests {
     }
 
     #[test]
+    fn struct_with_array_field() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Test {
+            status: bool,
+            point: [u32; 3],
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "status": true, "point": [1, 2, 3] }"#),
+            Ok((
+                Test {
+                    status: true,
+                    point: [1, 2, 3]
+                },
+                38
+            ))
+        );
+    }
+
+    #[test]
+    fn struct_with_tuple_field() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Test {
+            status: bool,
+            point: (u32, u32, u32),
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "status": true, "point": [1, 2, 3] }"#),
+            Ok((
+                Test {
+                    status: true,
+                    point: (1, 2, 3)
+                },
+                38
+            ))
+        );
+    }
+
+    #[test]
     fn ignoring_extra_fields() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Temperature {
