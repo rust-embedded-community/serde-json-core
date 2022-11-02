@@ -84,6 +84,8 @@ impl ::std::error::Error for Error {
     }
 }
 
+impl serde::de::StdError for Error {}
+
 pub(crate) struct Deserializer<'b> {
     slice: &'b [u8],
     index: usize,
