@@ -1,5 +1,6 @@
 //! Serialize a Rust data structure into JSON data
 
+use core::mem::MaybeUninit;
 use core::{fmt, str};
 
 use serde::ser;
@@ -39,12 +40,7 @@ impl From<u8> for Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        ""
-    }
-}
+impl serde::ser::StdError for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -96,12 +92,12 @@ impl<'a> Serializer<'a> {
 // which take 200+ bytes of ROM / Flash
 macro_rules! serialize_unsigned {
     ($self:ident, $N:expr, $v:expr) => {{
-        let mut buf: [u8; $N] = unsafe { super::uninitialized() };
+        let mut buf: [MaybeUninit<u8>; $N] = [MaybeUninit::uninit(); $N];
 
         let mut v = $v;
         let mut i = $N - 1;
         loop {
-            buf[i] = (v % 10) as u8 + b'0';
+            buf[i].write((v % 10) as u8 + b'0');
             v /= 10;
 
             if v == 0 {
@@ -111,7 +107,10 @@ macro_rules! serialize_unsigned {
             }
         }
 
-        $self.extend_from_slice(&buf[i..])
+        // Note(feature): maybe_uninit_slice
+        let buf = unsafe { &*(&buf[i..] as *const _ as *const [u8]) };
+
+        $self.extend_from_slice(buf)
     }};
 }
 
@@ -126,10 +125,10 @@ macro_rules! serialize_signed {
             (false, v as $uxx)
         };
 
-        let mut buf: [u8; $N] = unsafe { super::uninitialized() };
+        let mut buf: [MaybeUninit<u8>; $N] = [MaybeUninit::uninit(); $N];
         let mut i = $N - 1;
         loop {
-            buf[i] = (v % 10) as u8 + b'0';
+            buf[i].write((v % 10) as u8 + b'0');
             v /= 10;
 
             i -= 1;
@@ -140,11 +139,15 @@ macro_rules! serialize_signed {
         }
 
         if signed {
-            buf[i] = b'-';
+            buf[i].write(b'-');
         } else {
             i += 1;
         }
-        $self.extend_from_slice(&buf[i..])
+
+        // Note(feature): maybe_uninit_slice
+        let buf = unsafe { &*(&buf[i..] as *const _ as *const [u8]) };
+
+        $self.extend_from_slice(buf)
     }};
 }
 

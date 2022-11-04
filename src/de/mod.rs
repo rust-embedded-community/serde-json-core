@@ -77,12 +77,7 @@ pub enum Error {
     CustomErrorWithMessage(heapless::String<64>),
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        ""
-    }
-}
+impl serde::de::StdError for Error {}
 
 pub(crate) struct Deserializer<'b> {
     slice: &'b [u8],
@@ -1087,6 +1082,46 @@ mod tests {
         assert_eq!(
             crate::from_str::<Xy>(r#"[10, 20, 30]"#),
             Err(crate::de::Error::TrailingCharacters)
+        );
+    }
+
+    #[test]
+    fn struct_with_array_field() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Test {
+            status: bool,
+            point: [u32; 3],
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "status": true, "point": [1, 2, 3] }"#),
+            Ok((
+                Test {
+                    status: true,
+                    point: [1, 2, 3]
+                },
+                38
+            ))
+        );
+    }
+
+    #[test]
+    fn struct_with_tuple_field() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Test {
+            status: bool,
+            point: (u32, u32, u32),
+        }
+
+        assert_eq!(
+            crate::from_str(r#"{ "status": true, "point": [1, 2, 3] }"#),
+            Ok((
+                Test {
+                    status: true,
+                    point: (1, 2, 3)
+                },
+                38
+            ))
         );
     }
 
