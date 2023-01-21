@@ -178,7 +178,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     type Error = Error;
     type SerializeSeq = SerializeSeq<'a, 'b>;
     type SerializeTuple = SerializeSeq<'a, 'b>;
-    type SerializeTupleStruct = Unreachable;
+    type SerializeTupleStruct = SerializeSeq<'a, 'b>;
     type SerializeTupleVariant = Unreachable;
     type SerializeMap = SerializeMap<'a, 'b>;
     type SerializeStruct = SerializeStruct<'a, 'b>;
@@ -385,9 +385,9 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     fn serialize_tuple_struct(
         self,
         _name: &'static str,
-        _len: usize,
+        len: usize,
     ) -> Result<Self::SerializeTupleStruct> {
-        unreachable!()
+        self.serialize_seq(Some(len))
     }
 
     fn serialize_tuple_variant(
@@ -819,6 +819,19 @@ mod tests {
         assert_eq!(
             &*crate::to_string::<_, N>(&a).unwrap(),
             r#"{"A":{"x":54,"y":720}}"#
+        );
+    }
+
+    #[test]
+    fn test_tuple_struct() {
+        #[derive(Serialize)]
+        struct A<'a>(u32, Option<&'a str>, u16, bool);
+
+        let a = A(42, Some("A string"), 720, false);
+
+        assert_eq!(
+            &*crate::to_string::<_, N>(&a).unwrap(),
+            r#"[42,"A string",720,false]"#
         );
     }
 

@@ -51,3 +51,19 @@ impl<'a, 'b: 'a> ser::SerializeTuple for SerializeSeq<'a, 'b> {
         ser::SerializeSeq::end(self)
     }
 }
+
+impl<'a, 'b: 'a> ser::SerializeTupleStruct for SerializeSeq<'a, 'b> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<()>
+    where
+        T: ser::Serialize,
+    {
+        ser::SerializeSeq::serialize_element(self, value)
+    }
+
+    fn end(self) -> Result<Self::Ok> {
+        ser::SerializeSeq::end(self)
+    }
+}
