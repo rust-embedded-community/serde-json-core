@@ -836,6 +836,19 @@ mod tests {
     }
 
     #[test]
+    fn test_tuple_struct_roundtrip() {
+        use serde_derive::Deserialize;
+
+        #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+        struct A<'a>(u32, Option<&'a str>, u16, bool);
+
+        let a1 = A(42, Some("A string"), 720, false);
+        let serialized = crate::to_string::<_, N>(&a1).unwrap();
+        let (a2, _size): (A<'_>, usize) = crate::from_str(&serialized).unwrap();
+        assert_eq!(a1, a2);
+    }
+
+    #[test]
     fn test_serialize_bytes() {
         use core::fmt::Write;
         use heapless::String;
