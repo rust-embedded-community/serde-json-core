@@ -15,6 +15,7 @@
 //! - Supports deserialization of:
 //!   - `bool`
 //!   - Integers
+//!   - Floats
 //!   - `str` (This is a zero copy operation.) (\*)
 //!   - `Option`
 //!   - Arrays
@@ -24,6 +25,7 @@
 //! - Supports serialization (compact format only) of:
 //!   - `bool`
 //!   - Integers
+//!   - Floats
 //!   - `str` (\*\*)
 //!   - `Option`
 //!   - Arrays
