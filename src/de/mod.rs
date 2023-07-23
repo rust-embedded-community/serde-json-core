@@ -79,7 +79,8 @@ pub enum Error {
 
 impl serde::de::StdError for Error {}
 
-pub(crate) struct Deserializer<'b> {
+/// The Deserializer
+pub struct Deserializer<'b> {
     slice: &'b [u8],
     index: usize,
 }
@@ -87,6 +88,11 @@ pub(crate) struct Deserializer<'b> {
 impl<'a> Deserializer<'a> {
     fn new(slice: &'a [u8]) -> Deserializer<'_> {
         Deserializer { slice, index: 0 }
+    }
+
+    /// Return the current index in the buffer.
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     fn eat_char(&mut self) {

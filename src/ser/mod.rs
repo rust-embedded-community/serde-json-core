@@ -48,7 +48,8 @@ impl fmt::Display for Error {
     }
 }
 
-pub(crate) struct Serializer<'a> {
+/// The Serializer
+pub struct Serializer<'a> {
     buf: &'a mut [u8],
     current_length: usize,
 }
@@ -85,6 +86,11 @@ impl<'a> Serializer<'a> {
             }
             Ok(())
         }
+    }
+
+    /// Return the current amount of serialized data in the buffer
+    pub fn current_length(&self) -> usize {
+        self.current_length
     }
 }
 
@@ -475,49 +481,14 @@ impl ser::Error for Error {
     }
 }
 
-pub(crate) enum Unreachable {}
-
-impl ser::SerializeTupleStruct for Unreachable {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_field<T: ?Sized>(&mut self, _value: &T) -> Result<()> {
-        unreachable!()
-    }
-
-    fn end(self) -> Result<Self::Ok> {
-        unreachable!()
-    }
-}
+/// An unreachable type to fill the SerializeTupleVariant type
+pub enum Unreachable {}
 
 impl ser::SerializeTupleVariant for Unreachable {
     type Ok = ();
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(&mut self, _value: &T) -> Result<()> {
-        unreachable!()
-    }
-
-    fn end(self) -> Result<Self::Ok> {
-        unreachable!()
-    }
-}
-
-impl ser::SerializeMap for Unreachable {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<()>
-    where
-        T: ser::Serialize,
-    {
-        unreachable!()
-    }
-
-    fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<()>
-    where
-        T: ser::Serialize,
-    {
         unreachable!()
     }
 

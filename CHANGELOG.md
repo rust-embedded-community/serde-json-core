@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Support for serializing tuple structs. These are serialized as JSON arrays,
   which matches `serde_json` behaviour.
+- `Serializer` and `Deserializer` are now `pub`.
+- Added `Serializer::current_length()` and `Deserializer::index()` getters.
 
 ## [v0.5.0] - 2022-11-04
 
