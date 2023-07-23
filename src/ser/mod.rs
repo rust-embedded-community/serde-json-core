@@ -48,7 +48,7 @@ impl fmt::Display for Error {
     }
 }
 
-/// The Serializer
+/// A structure that serializes Rust values as JSON into a buffer.
 pub struct Serializer<'a> {
     buf: &'a mut [u8],
     current_length: usize,

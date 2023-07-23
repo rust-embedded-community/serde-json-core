@@ -79,7 +79,7 @@ pub enum Error {
 
 impl serde::de::StdError for Error {}
 
-/// The Deserializer
+/// A structure that deserializes Rust values from JSON in a buffer.
 pub struct Deserializer<'b> {
     slice: &'b [u8],
     index: usize,
