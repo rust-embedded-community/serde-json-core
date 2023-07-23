@@ -55,11 +55,17 @@ pub struct Serializer<'a> {
 }
 
 impl<'a> Serializer<'a> {
-    fn new(buf: &'a mut [u8]) -> Self {
+    /// Create a new `Serializer`
+    pub fn new(buf: &'a mut [u8]) -> Self {
         Serializer {
             buf,
             current_length: 0,
         }
+    }
+
+    /// Return the current amount of serialized data in the buffer
+    pub fn end(&self) -> usize {
+        self.current_length
     }
 
     fn push(&mut self, c: u8) -> Result<()> {
@@ -86,11 +92,6 @@ impl<'a> Serializer<'a> {
             }
             Ok(())
         }
-    }
-
-    /// Return the current amount of serialized data in the buffer
-    pub fn current_length(&self) -> usize {
-        self.current_length
     }
 }
 
