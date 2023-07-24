@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `Serializer` and `Deserializer` are now `pub`.
 - Added `pub` `Serializer::end()` and `Deserializer::end()`.
 
+### Changed
+
+- Increase MSRV to 1.56.0 to work around dependency-MSRV issues (see #72)
+
 ## [v0.5.0] - 2022-11-04
 
 ### Changed
