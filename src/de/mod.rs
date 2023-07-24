@@ -79,13 +79,15 @@ pub enum Error {
 
 impl serde::de::StdError for Error {}
 
-pub(crate) struct Deserializer<'b> {
+/// A structure that deserializes Rust values from JSON in a buffer.
+pub struct Deserializer<'b> {
     slice: &'b [u8],
     index: usize,
 }
 
 impl<'a> Deserializer<'a> {
-    fn new(slice: &'a [u8]) -> Deserializer<'_> {
+    /// Create a new `Deserializer`
+    pub fn new(slice: &'a [u8]) -> Deserializer<'_> {
         Deserializer { slice, index: 0 }
     }
 
@@ -93,7 +95,9 @@ impl<'a> Deserializer<'a> {
         self.index += 1;
     }
 
-    fn end(&mut self) -> Result<usize> {
+    /// Check whether there is any unexpected data left in the buffer
+    /// and return the amount of data consumed
+    pub fn end(&mut self) -> Result<usize> {
         match self.parse_whitespace() {
             Some(_) => Err(Error::TrailingCharacters),
             None => Ok(self.index),
