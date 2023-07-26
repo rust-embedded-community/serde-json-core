@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.5.1] - 2023-07-26
+
 ### Added
 
 - Support for serializing tuple structs. These are serialized as JSON arrays,
@@ -74,7 +76,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 Initial release
 
-[Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.1...HEAD
+[v0.5.1]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.2.0...v0.3.0
