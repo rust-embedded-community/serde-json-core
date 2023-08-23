@@ -19,6 +19,9 @@ mod seq;
 mod struct_;
 mod ser_backend;
 
+#[cfg(feature = "embedded-io")]
+mod write_backend;
+
 /// Serialization result
 pub type Result<T> = ::core::result::Result<T, Error>;
 
@@ -29,6 +32,9 @@ pub type Result<T> = ::core::result::Result<T, Error>;
 pub enum Error {
     /// Buffer is full
     BufferFull,
+    /// Some IO error occurred
+    #[cfg(feature = "embedded-io")]
+    IOError
 }
 
 impl From<()> for Error {
@@ -458,6 +464,19 @@ where
     Ok(backend.current_length)
 }
 
+/// Serializes the given data structure as a JSON byte vector into the provided writer
+#[cfg(feature = "embedded-io")]
+pub fn to_writer<T, W>(value: &T, writer: &mut W) -> Result<()>
+where
+    T: ser::Serialize + ?Sized,
+    W: embedded_io::Write
+{
+    let mut backend = write_backend::WriteSerializer::new(writer);
+    let mut ser = Serializer::new(&mut backend);
+    value.serialize(&mut ser)?;
+    Ok(())
+}
+
 impl ser::Error for Error {
     fn custom<T>(_msg: T) -> Self
     where
@@ -831,5 +850,30 @@ mod tests {
 
         let sd3 = SimpleDecimal(22222.777777);
         assert_eq!(&*crate::to_string::<_, N>(&sd3).unwrap(), r#"22222.78"#);
+    }
+
+    #[cfg(feature = "embedded-io")]
+    mod my_writer;
+
+    #[cfg(feature = "embedded-io")]
+    #[test]
+    fn to_writer() {
+        #[derive(Serialize)]
+        struct Dog<'a> {
+            name: &'a str,
+            age: u8
+        }
+
+        let dog = Dog { name: "Punto", age: 10 };
+        let json1 = crate::to_string::<_, 128>(&dog).unwrap();
+
+        let mut my_writer = my_writer::MyWriter { buffer: [0; 128], pos: 0, fail: false };
+        crate::to_writer(&dog, &mut my_writer).unwrap();
+        let json2 = &my_writer.buffer[..my_writer.pos];
+
+        assert_eq!(
+            json1.as_bytes(),
+            json2
+        );
     }
 }
