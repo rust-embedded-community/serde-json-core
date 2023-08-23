@@ -11,11 +11,13 @@ use heapless::{String, Vec};
 
 use self::map::SerializeMap;
 use self::seq::SerializeSeq;
+use self::ser_backend::{SerializerBackend, SliceSerializer};
 use self::struct_::{SerializeStruct, SerializeStructVariant};
 
 mod map;
 mod seq;
 mod struct_;
+mod ser_backend;
 
 /// Serialization result
 pub type Result<T> = ::core::result::Result<T, Error>;
@@ -49,50 +51,31 @@ impl fmt::Display for Error {
     }
 }
 
+
 /// A structure that serializes Rust values as JSON into a buffer.
 pub struct Serializer<'a> {
-    buf: &'a mut [u8],
-    current_length: usize,
+    backend: &'a mut dyn SerializerBackend
 }
 
 impl<'a> Serializer<'a> {
     /// Create a new `Serializer`
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        Serializer {
-            buf,
-            current_length: 0,
+    pub fn new(backend: &'a mut dyn SerializerBackend) -> Self {
+        Self {
+            backend
         }
     }
 
     /// Return the current amount of serialized data in the buffer
     pub fn end(&self) -> usize {
-        self.current_length
+        self.backend.end()
     }
 
     fn push(&mut self, c: u8) -> Result<()> {
-        if self.current_length < self.buf.len() {
-            unsafe { self.push_unchecked(c) };
-            Ok(())
-        } else {
-            Err(Error::BufferFull)
-        }
-    }
-
-    unsafe fn push_unchecked(&mut self, c: u8) {
-        self.buf[self.current_length] = c;
-        self.current_length += 1;
+        self.backend.push(c)
     }
 
     fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
-        if self.current_length + other.len() > self.buf.len() {
-            // won't fit in the buf; don't modify anything and return an error
-            Err(Error::BufferFull)
-        } else {
-            for c in other {
-                unsafe { self.push_unchecked(*c) };
-            }
-            Ok(())
-        }
+        self.backend.extend_from_slice(other)
     }
 }
 
@@ -469,9 +452,10 @@ pub fn to_slice<T>(value: &T, buf: &mut [u8]) -> Result<usize>
 where
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new(buf);
+    let mut backend = SliceSerializer::new(buf);
+    let mut ser = Serializer::new(&mut backend);
     value.serialize(&mut ser)?;
-    Ok(ser.current_length)
+    Ok(backend.current_length)
 }
 
 impl ser::Error for Error {
