@@ -19,6 +19,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// This type represents all possible errors that can occur when deserializing JSON data
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(not(feature = "custom-error-messages"), derive(Copy))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
 pub enum Error {
     /// EOF while parsing a list.
