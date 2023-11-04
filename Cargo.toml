@@ -24,7 +24,7 @@ default-features = false
 version = "1.0.100"
 
 [dependencies.defmt]
-version = "0.3.0"
+version = "0.3.5"
 default-features = false
 optional = true
 

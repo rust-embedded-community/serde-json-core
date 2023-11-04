@@ -75,7 +75,9 @@ pub enum Error {
 
     /// Error with a custom message that was preserved.
     #[cfg(feature = "custom-error-messages")]
-    CustomErrorWithMessage(heapless::String<64>),
+    CustomErrorWithMessage(
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))] heapless::String<64>,
+    ),
 }
 
 impl serde::de::StdError for Error {}
