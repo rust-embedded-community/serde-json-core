@@ -4,7 +4,7 @@ categories = ["no-std"]
 description = "serde-json for no_std programs"
 documentation = "https://docs.rs/serde-json-core"
 edition = "2018"
-rust-version = "1.56.0"  # keep in sync with ci, src/lib.rs, and README
+rust-version = "1.62.0"  # keep in sync with ci, src/lib.rs, and README
 keywords = ["serde", "json"]
 license = "MIT OR Apache-2.0"
 name = "serde-json-core"
@@ -22,6 +22,11 @@ optional = true
 [dependencies.serde]
 default-features = false
 version = "1.0.100"
+
+[dependencies.defmt]
+version = "0.3.5"
+default-features = false
+optional = true
 
 [dev-dependencies]
 serde_derive = "1.0.100"

@@ -19,6 +19,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// This type represents all possible errors that can occur when deserializing JSON data
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(not(feature = "custom-error-messages"), derive(Copy))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
 pub enum Error {
     /// EOF while parsing a list.
@@ -74,7 +75,9 @@ pub enum Error {
 
     /// Error with a custom message that was preserved.
     #[cfg(feature = "custom-error-messages")]
-    CustomErrorWithMessage(heapless::String<64>),
+    CustomErrorWithMessage(
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))] heapless::String<64>,
+    ),
 }
 
 impl serde::de::StdError for Error {}

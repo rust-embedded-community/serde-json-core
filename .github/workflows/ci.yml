@@ -21,7 +21,7 @@ jobs:
 
         include:
           # Test MSRV
-          - rust: 1.56.0  # keep in sync with manifest rust-version
+          - rust: 1.62.0  # keep in sync with manifest rust-version
             TARGET: x86_64-unknown-linux-gnu
 
           # Test nightly but don't fail
@@ -45,4 +45,4 @@ jobs:
         if: ${{ contains(matrix.TARGET, 'x86_64') }}
         with:
           command: test
-          args: --target=${{ matrix.TARGET }}
+          args: --target=${{ matrix.TARGET }} --all-features
