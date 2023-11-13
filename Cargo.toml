@@ -16,7 +16,7 @@ version = "0.5.1"
 ryu = "1.0.5"
 
 [dependencies.heapless]
-version = "0.7"
+version = "0.8"
 optional = true
 
 [dependencies.serde]

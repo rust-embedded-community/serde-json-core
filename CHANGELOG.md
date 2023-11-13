@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-### Added 
+### Added
 
 - Support for optional package `defmt` which allows for easy conversion for
 error types when using tools like `probe-rs` for logging over debuggers.
+
+### Changed
+
+- `heapless` bumped to v0.8.
 
 ## [v0.5.1] - 2023-07-26
 
