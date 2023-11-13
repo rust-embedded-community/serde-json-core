@@ -448,7 +448,7 @@ pub fn to_string<T, const N: usize>(value: &T) -> Result<String<N>>
 where
     T: ser::Serialize + ?Sized,
 {
-    Ok(unsafe { str::from_utf8_unchecked(&to_vec::<T, N>(value)?) }.into())
+    Ok(unsafe { String::from_utf8_unchecked(to_vec::<T, N>(value)?) })
 }
 
 /// Serializes the given data structure as a JSON byte vector

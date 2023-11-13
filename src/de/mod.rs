@@ -757,6 +757,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use core::str::FromStr;
     use serde_derive::Deserialize;
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -1083,7 +1084,10 @@ mod tests {
         assert_eq!(
             crate::from_str::<Xy>(r#"[10]"#),
             Err(crate::de::Error::CustomErrorWithMessage(
-                "invalid length 1, expected tuple struct Xy with 2 elements".into()
+                heapless::String::from_str(
+                    "invalid length 1, expected tuple struct Xy with 2 elements"
+                )
+                .unwrap()
             ))
         );
         assert_eq!(
@@ -1190,7 +1194,9 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("something bad happened"),
-            crate::de::Error::CustomErrorWithMessage("something bad happened".into())
+            crate::de::Error::CustomErrorWithMessage(
+                heapless::String::from_str("something bad happened").unwrap()
+            )
         );
     }
 
@@ -1200,8 +1206,8 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("0123456789012345678901234567890123456789012345678901234567890123 <- after here the message should be truncated"),
-            crate::de::Error::CustomErrorWithMessage(
-                "0123456789012345678901234567890123456789012345678901234567890123".into()
+            crate::de::Error::CustomErrorWithMessage(heapless::String::from_str(
+                "0123456789012345678901234567890123456789012345678901234567890123").unwrap()
             )
         );
     }
