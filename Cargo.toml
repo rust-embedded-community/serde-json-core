@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 name = "serde-json-core"
 readme = "README.md"
 repository = "https://github.com/rust-embedded-community/serde-json-core"
-version = "0.5.1"
+version = "0.6.0"
 
 [dependencies]
 ryu = "1.0.5"
@@ -30,6 +30,7 @@ optional = true
 
 [dev-dependencies]
 serde_derive = "1.0.100"
+heapless = { version = "0.8", features = ["serde"] }
 
 [features]
 default = ["heapless"]

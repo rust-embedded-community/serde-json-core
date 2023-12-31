@@ -16,7 +16,7 @@
 //!   - `bool`
 //!   - Integers
 //!   - Floats
-//!   - `str` (This is a zero copy operation.) (\*)
+//!   - `str` (This is a zero copy operation, deserializing the string in place.)
 //!   - `Option`
 //!   - Arrays
 //!   - Tuples
@@ -33,8 +33,6 @@
 //!   - Structs
 //!   - C like enums
 //!
-//! (\*) Deserialization of strings ignores escaped sequences. Escaped sequences might be supported
-//! in the future using a different Serializer as this operation is not zero copy.
 //!
 //! (\*\*) Serialization of strings doesn't escape stuff. This simply has not been implemented yet.
 //!
