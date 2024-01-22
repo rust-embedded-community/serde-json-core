@@ -94,6 +94,66 @@ impl<'a> Serializer<'a> {
             Ok(())
         }
     }
+
+    fn push_char(&mut self, c: char) -> Result<()> {
+        // Do escaping according to "6. MUST represent all strings (including object member names) in
+        // their minimal-length UTF-8 encoding": https://gibson042.github.io/canonicaljson-spec/
+        //
+        // We don't need to escape lone surrogates because surrogate pairs do not exist in valid UTF-8,
+        // even if they can exist in JSON or JavaScript strings (UCS-2 based). As a result, lone surrogates
+        // cannot exist in a Rust String. If they do, the bug is in the String constructor.
+        // An excellent explanation is available at https://www.youtube.com/watch?v=HhIEDWmQS3w
+
+        // Temporary storage for encoded a single char.
+        // A char is up to 4 bytes long wehn encoded to UTF-8.
+        let mut encoding_tmp = [0u8; 4];
+
+        match c {
+            '\\' => {
+                self.push(b'\\')?;
+                self.push(b'\\')?;
+            }
+            '"' => {
+                self.push(b'\\')?;
+                self.push(b'"')?;
+            }
+            '\u{0008}' => {
+                self.push(b'\\')?;
+                self.push(b'b')?;
+            }
+            '\u{0009}' => {
+                self.push(b'\\')?;
+                self.push(b't')?;
+            }
+            '\u{000A}' => {
+                self.push(b'\\')?;
+                self.push(b'n')?;
+            }
+            '\u{000C}' => {
+                self.push(b'\\')?;
+                self.push(b'f')?;
+            }
+            '\u{000D}' => {
+                self.push(b'\\')?;
+                self.push(b'r')?;
+            }
+            '\u{0000}'..='\u{001F}' => {
+                self.push(b'\\')?;
+                self.push(b'u')?;
+                self.push(b'0')?;
+                self.push(b'0')?;
+                let (hex1, hex2) = hex(c as u8);
+                self.push(hex1)?;
+                self.push(hex2)?;
+            }
+            _ => {
+                let encoded = c.encode_utf8(&mut encoding_tmp as &mut [u8]);
+                self.extend_from_slice(encoded.as_bytes())?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 // NOTE(serialize_*signed) This is basically the numtoa implementation minus the lookup tables,
@@ -263,62 +323,8 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
         self.push(b'"')?;
 
-        // Do escaping according to "6. MUST represent all strings (including object member names) in
-        // their minimal-length UTF-8 encoding": https://gibson042.github.io/canonicaljson-spec/
-        //
-        // We don't need to escape lone surrogates because surrogate pairs do not exist in valid UTF-8,
-        // even if they can exist in JSON or JavaScript strings (UCS-2 based). As a result, lone surrogates
-        // cannot exist in a Rust String. If they do, the bug is in the String constructor.
-        // An excellent explanation is available at https://www.youtube.com/watch?v=HhIEDWmQS3w
-
-        // Temporary storage for encoded a single char.
-        // A char is up to 4 bytes long wehn encoded to UTF-8.
-        let mut encoding_tmp = [0u8; 4];
-
         for c in v.chars() {
-            match c {
-                '\\' => {
-                    self.push(b'\\')?;
-                    self.push(b'\\')?;
-                }
-                '"' => {
-                    self.push(b'\\')?;
-                    self.push(b'"')?;
-                }
-                '\u{0008}' => {
-                    self.push(b'\\')?;
-                    self.push(b'b')?;
-                }
-                '\u{0009}' => {
-                    self.push(b'\\')?;
-                    self.push(b't')?;
-                }
-                '\u{000A}' => {
-                    self.push(b'\\')?;
-                    self.push(b'n')?;
-                }
-                '\u{000C}' => {
-                    self.push(b'\\')?;
-                    self.push(b'f')?;
-                }
-                '\u{000D}' => {
-                    self.push(b'\\')?;
-                    self.push(b'r')?;
-                }
-                '\u{0000}'..='\u{001F}' => {
-                    self.push(b'\\')?;
-                    self.push(b'u')?;
-                    self.push(b'0')?;
-                    self.push(b'0')?;
-                    let (hex1, hex2) = hex(c as u8);
-                    self.push(hex1)?;
-                    self.push(hex2)?;
-                }
-                _ => {
-                    let encoded = c.encode_utf8(&mut encoding_tmp as &mut [u8]);
-                    self.extend_from_slice(encoded.as_bytes())?;
-                }
-            }
+            self.push_char(c)?;
         }
 
         self.push(b'"')
@@ -434,11 +440,40 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         Ok(SerializeStructVariant::new(self))
     }
 
-    fn collect_str<T: ?Sized>(self, _value: &T) -> Result<Self::Ok>
+    fn collect_str<T: ?Sized>(self, value: &T) -> Result<Self::Ok>
     where
         T: fmt::Display,
     {
-        unreachable!()
+        self.push(b'"')?;
+
+        let mut col = StringCollector::new(self);
+        fmt::write(&mut col, format_args!("{}", value)).or(Err(Error::BufferFull))?;
+
+        self.push(b'"')
+    }
+}
+
+struct StringCollector<'a, 'b> {
+    ser: &'a mut Serializer<'b>,
+}
+
+impl<'a, 'b> StringCollector<'a, 'b> {
+    pub fn new(ser: &'a mut Serializer<'b>) -> Self {
+        Self { ser }
+    }
+
+    fn do_write_str(&mut self, s: &str) -> Result<()> {
+        for c in s.chars() {
+            self.ser.push_char(c)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a, 'b> fmt::Write for StringCollector<'a, 'b> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.do_write_str(s).or(Err(fmt::Error))
     }
 }
 
