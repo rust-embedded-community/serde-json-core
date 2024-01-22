@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Support for optional package `defmt` which allows for easy conversion for
 error types when using tools like `probe-rs` for logging over debuggers.
+- Implement `Serializer::collect_str`
 
 ### Changed
 
