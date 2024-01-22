@@ -447,15 +447,14 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self.push(b'"')?;
 
         let mut col = StringCollector::new(self);
-        fmt::write(&mut col, format_args!("{}", value))
-            .or(Err(Error::BufferFull))?;
+        fmt::write(&mut col, format_args!("{}", value)).or(Err(Error::BufferFull))?;
 
         self.push(b'"')
     }
 }
 
 struct StringCollector<'a, 'b> {
-    ser: &'a mut Serializer<'b>
+    ser: &'a mut Serializer<'b>,
 }
 
 impl<'a, 'b> StringCollector<'a, 'b> {
@@ -477,7 +476,6 @@ impl<'a, 'b> fmt::Write for StringCollector<'a, 'b> {
         self.do_write_str(s).or(Err(fmt::Error))
     }
 }
-
 
 /// Serializes the given data structure as a string of JSON text
 #[cfg(feature = "heapless")]
