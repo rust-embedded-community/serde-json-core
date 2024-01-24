@@ -851,8 +851,8 @@ mod tests {
         struct A<'a>(u32, Option<&'a str>, u16, bool);
 
         let a1 = A(42, Some("A string"), 720, false);
-        let serialized = crate::to_string::<_, N>(&a1).unwrap();
-        let (a2, _size): (A<'_>, usize) = crate::from_str(&serialized).unwrap();
+        let mut serialized = crate::to_string::<_, N>(&a1).unwrap();
+        let (a2, _size): (A<'_>, usize) = crate::from_str(serialized.as_mut_str()).unwrap();
         assert_eq!(a1, a2);
     }
 
