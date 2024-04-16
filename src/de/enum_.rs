@@ -2,17 +2,17 @@ use serde::de;
 
 use crate::de::{Deserializer, Error, Result};
 
-pub(crate) struct UnitVariantAccess<'a, 'b> {
-    de: &'a mut Deserializer<'b>,
+pub(crate) struct UnitVariantAccess<'a, 'b, 's> {
+    de: &'a mut Deserializer<'b, 's>,
 }
 
-impl<'a, 'b> UnitVariantAccess<'a, 'b> {
-    pub(crate) fn new(de: &'a mut Deserializer<'b>) -> Self {
+impl<'a, 'b, 's> UnitVariantAccess<'a, 'b, 's> {
+    pub(crate) fn new(de: &'a mut Deserializer<'b, 's>) -> Self {
         UnitVariantAccess { de }
     }
 }
 
-impl<'a, 'de> de::EnumAccess<'de> for UnitVariantAccess<'a, 'de> {
+impl<'a, 'de, 's> de::EnumAccess<'de> for UnitVariantAccess<'a, 'de, 's> {
     type Error = Error;
     type Variant = Self;
 
@@ -25,7 +25,7 @@ impl<'a, 'de> de::EnumAccess<'de> for UnitVariantAccess<'a, 'de> {
     }
 }
 
-impl<'de, 'a> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de> {
+impl<'de, 'a, 's> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de, 's> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
@@ -54,17 +54,17 @@ impl<'de, 'a> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de> {
     }
 }
 
-pub(crate) struct VariantAccess<'a, 'b> {
-    de: &'a mut Deserializer<'b>,
+pub(crate) struct VariantAccess<'a, 'b, 's> {
+    de: &'a mut Deserializer<'b, 's>,
 }
 
-impl<'a, 'b> VariantAccess<'a, 'b> {
-    pub(crate) fn new(de: &'a mut Deserializer<'b>) -> Self {
+impl<'a, 'b, 's> VariantAccess<'a, 'b, 's> {
+    pub(crate) fn new(de: &'a mut Deserializer<'b, 's>) -> Self {
         VariantAccess { de }
     }
 }
 
-impl<'a, 'de> de::EnumAccess<'de> for VariantAccess<'a, 'de> {
+impl<'a, 'de, 's> de::EnumAccess<'de> for VariantAccess<'a, 'de, 's> {
     type Error = Error;
     type Variant = Self;
 
@@ -78,7 +78,7 @@ impl<'a, 'de> de::EnumAccess<'de> for VariantAccess<'a, 'de> {
     }
 }
 
-impl<'de, 'a> de::VariantAccess<'de> for VariantAccess<'a, 'de> {
+impl<'de, 'a, 's> de::VariantAccess<'de> for VariantAccess<'a, 'de, 's> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {

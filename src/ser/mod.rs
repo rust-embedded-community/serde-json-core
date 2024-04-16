@@ -714,7 +714,7 @@ mod tests {
 
         assert_eq!(
             &*crate::to_string::<_, N>(&Temperature {
-                temperature: -2.3456789012345e-23
+                temperature: -2.3456788e-23
             })
             .unwrap(),
             r#"{"temperature":-2.3456788e-23}"#
@@ -870,7 +870,7 @@ mod tests {
             {
                 let mut aux: String<{ N }> = String::new();
                 write!(aux, "{:.2}", self.0).unwrap();
-                serializer.serialize_bytes(&aux.as_bytes())
+                serializer.serialize_bytes(aux.as_bytes())
             }
         }
 
@@ -880,7 +880,7 @@ mod tests {
         let sd2 = SimpleDecimal(0.000);
         assert_eq!(&*crate::to_string::<_, N>(&sd2).unwrap(), r#"0.00"#);
 
-        let sd3 = SimpleDecimal(22222.777777);
+        let sd3 = SimpleDecimal(22222.78);
         assert_eq!(&*crate::to_string::<_, N>(&sd3).unwrap(), r#"22222.78"#);
     }
 }

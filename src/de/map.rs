@@ -2,18 +2,18 @@ use serde::de::{self, Visitor};
 
 use crate::de::{Deserializer, Error};
 
-pub struct MapAccess<'a, 'b> {
-    de: &'a mut Deserializer<'b>,
+pub struct MapAccess<'a, 'b, 's> {
+    de: &'a mut Deserializer<'b, 's>,
     first: bool,
 }
 
-impl<'a, 'b> MapAccess<'a, 'b> {
-    pub(crate) fn new(de: &'a mut Deserializer<'b>) -> Self {
+impl<'a, 'b, 's> MapAccess<'a, 'b, 's> {
+    pub(crate) fn new(de: &'a mut Deserializer<'b, 's>) -> Self {
         MapAccess { de, first: true }
     }
 }
 
-impl<'a, 'de> de::MapAccess<'de> for MapAccess<'a, 'de> {
+impl<'a, 'de, 's> de::MapAccess<'de> for MapAccess<'a, 'de, 's> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Error>
@@ -57,11 +57,11 @@ impl<'a, 'de> de::MapAccess<'de> for MapAccess<'a, 'de> {
     }
 }
 
-struct MapKey<'a, 'b> {
-    de: &'a mut Deserializer<'b>,
+struct MapKey<'a, 'b, 's> {
+    de: &'a mut Deserializer<'b, 's>,
 }
 
-impl<'de, 'a> de::Deserializer<'de> for MapKey<'a, 'de> {
+impl<'de, 'a, 's> de::Deserializer<'de> for MapKey<'a, 'de, 's> {
     type Error = Error;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Error>
