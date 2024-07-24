@@ -4,6 +4,7 @@ use core::str::FromStr;
 use core::{fmt, str};
 
 use serde::de::{self, Visitor};
+use serde::Serialize;
 
 use self::enum_::{UnitVariantAccess, VariantAccess};
 use self::map::MapAccess;
@@ -17,7 +18,7 @@ mod seq;
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// This type represents all possible errors that can occur when deserializing JSON data
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[cfg_attr(not(feature = "custom-error-messages"), derive(Copy))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
