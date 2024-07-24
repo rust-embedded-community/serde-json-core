@@ -70,6 +70,9 @@ pub enum Error {
     /// Invalid String Escape Sequence
     InvalidEscapeSequence,
 
+    /// Unescaping and Escaped String requires a buffer
+    EscapedStringRequiresBuffer,
+
     /// Escaped String length exceeds buffer size
     EscapedStringIsTooLong,
 
@@ -850,7 +853,13 @@ pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
-    from_slice_using_string_unescape_buffer(v, &mut [0; 128])
+    from_slice_using_string_unescape_buffer(v, &mut []).map_err(|error| {
+        if let Error::EscapedStringIsTooLong = error {
+            Error::EscapedStringRequiresBuffer
+        } else {
+            error
+        }
+    })
 }
 
 /// Deserializes an instance of type T from a string of JSON text, using the provided buffer to unescape strings
@@ -937,18 +946,24 @@ mod tests {
 
     #[test]
     fn char() {
-        assert_eq!(crate::from_str(r#""n""#), Ok(('n', 3)));
-        assert_eq!(crate::from_str(r#""\"""#), Ok(('"', 4)));
-        assert_eq!(crate::from_str(r#""\\""#), Ok(('\\', 4)));
-        assert_eq!(crate::from_str(r#""/""#), Ok(('/', 3)));
-        assert_eq!(crate::from_str(r#""\b""#), Ok(('\x08', 4)));
-        assert_eq!(crate::from_str(r#""\f""#), Ok(('\x0C', 4)));
-        assert_eq!(crate::from_str(r#""\n""#), Ok(('\n', 4)));
-        assert_eq!(crate::from_str(r#""\r""#), Ok(('\r', 4)));
-        assert_eq!(crate::from_str(r#""\t""#), Ok(('\t', 4)));
-        assert_eq!(crate::from_str(r#""\u000b""#), Ok(('\x0B', 8)));
-        assert_eq!(crate::from_str(r#""\u000B""#), Ok(('\x0B', 8)));
-        assert_eq!(crate::from_str(r#""Σ""#), Ok(('Σ', 4)));
+        fn from_str_test<'de, T: serde::Deserialize<'de>>(
+            s: &'de str,
+        ) -> super::Result<(T, usize)> {
+            crate::from_str_using_string_unescape_buffer(s, &mut [0; 8])
+        }
+
+        assert_eq!(from_str_test(r#""n""#), Ok(('n', 3)));
+        assert_eq!(from_str_test(r#""\"""#), Ok(('"', 4)));
+        assert_eq!(from_str_test(r#""\\""#), Ok(('\\', 4)));
+        assert_eq!(from_str_test(r#""/""#), Ok(('/', 3)));
+        assert_eq!(from_str_test(r#""\b""#), Ok(('\x08', 4)));
+        assert_eq!(from_str_test(r#""\f""#), Ok(('\x0C', 4)));
+        assert_eq!(from_str_test(r#""\n""#), Ok(('\n', 4)));
+        assert_eq!(from_str_test(r#""\r""#), Ok(('\r', 4)));
+        assert_eq!(from_str_test(r#""\t""#), Ok(('\t', 4)));
+        assert_eq!(from_str_test(r#""\u000b""#), Ok(('\x0B', 8)));
+        assert_eq!(from_str_test(r#""\u000B""#), Ok(('\x0B', 8)));
+        assert_eq!(from_str_test(r#""Σ""#), Ok(('Σ', 4)));
     }
 
     #[test]
@@ -963,41 +978,76 @@ mod tests {
             core::str::FromStr::from_str(s).expect("Failed to create test string")
         }
 
+        fn from_str_test<'de, T: serde::Deserialize<'de>>(
+            s: &'de str,
+        ) -> super::Result<(T, usize)> {
+            crate::from_str_using_string_unescape_buffer(s, &mut [0; 16])
+        }
+
         // escaped " in the string content
+        assert_eq!(from_str_test(r#" "foo\"bar" "#), Ok((s(r#"foo"bar"#), 12)));
         assert_eq!(
-            crate::from_str(r#" "foo\"bar" "#),
-            Ok((s(r#"foo"bar"#), 12))
-        );
-        assert_eq!(
-            crate::from_str(r#" "foo\\\"bar" "#),
+            from_str_test(r#" "foo\\\"bar" "#),
             Ok((s(r#"foo\"bar"#), 14))
         );
         assert_eq!(
-            crate::from_str(r#" "foo\"\"bar" "#),
+            from_str_test(r#" "foo\"\"bar" "#),
             Ok((s(r#"foo""bar"#), 14))
         );
-        assert_eq!(crate::from_str(r#" "\"bar" "#), Ok((s(r#""bar"#), 9)));
-        assert_eq!(crate::from_str(r#" "foo\"" "#), Ok((s(r#"foo""#), 9)));
-        assert_eq!(crate::from_str(r#" "\"" "#), Ok((s(r#"""#), 6)));
+        assert_eq!(from_str_test(r#" "\"bar" "#), Ok((s(r#""bar"#), 9)));
+        assert_eq!(from_str_test(r#" "foo\"" "#), Ok((s(r#"foo""#), 9)));
+        assert_eq!(from_str_test(r#" "\"" "#), Ok((s(r#"""#), 6)));
 
         // non-excaped " preceded by backslashes
         assert_eq!(
-            crate::from_str(r#" "foo bar\\" "#),
+            from_str_test(r#" "foo bar\\" "#),
             Ok((s(r#"foo bar\"#), 13))
         );
         assert_eq!(
-            crate::from_str(r#" "foo bar\\\\" "#),
+            from_str_test(r#" "foo bar\\\\" "#),
             Ok((s(r#"foo bar\\"#), 15))
         );
         assert_eq!(
-            crate::from_str(r#" "foo bar\\\\\\" "#),
+            from_str_test(r#" "foo bar\\\\\\" "#),
             Ok((s(r#"foo bar\\\"#), 17))
         );
         assert_eq!(
-            crate::from_str(r#" "foo bar\\\\\\\\" "#),
+            from_str_test(r#" "foo bar\\\\\\\\" "#),
             Ok((s(r#"foo bar\\\\"#), 19))
         );
-        assert_eq!(crate::from_str(r#" "\\" "#), Ok((s(r#"\"#), 6)));
+        assert_eq!(from_str_test(r#" "\\" "#), Ok((s(r#"\"#), 6)));
+    }
+
+    #[test]
+    fn tuple_of_str() {
+        fn s(s: &'static str) -> heapless::String<1024> {
+            core::str::FromStr::from_str(s).expect("Failed to create test string")
+        }
+
+        fn from_str_test<'de, T: serde::Deserialize<'de>>(
+            s: &'de str,
+        ) -> super::Result<(T, usize)> {
+            crate::from_str_using_string_unescape_buffer(s, &mut [0; 16])
+        }
+
+        // The combined length of the first and third strings are longer than the buffer, but that's OK,
+        // as escaped strings are deserialized into owned str types, e.g. `heapless::String`.
+        // The second string is longer than the buffer, but that's OK, as strings which aren't escaped
+        // are deserialized as str's borrowed from the input
+
+        assert_eq!(
+            from_str_test(
+                r#" [ "AAAAAAAAAAAA\n", "BBBBBBBBBBBBBBBBBBBBBBBB", "CCCCCCCCCCCC\n" ] "#
+            ),
+            Ok((
+                (
+                    s("AAAAAAAAAAAA\n"),
+                    "BBBBBBBBBBBBBBBBBBBBBBBB",
+                    s("CCCCCCCCCCCC\n")
+                ),
+                68
+            ))
+        );
     }
 
     #[test]
