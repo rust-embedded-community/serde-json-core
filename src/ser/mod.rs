@@ -186,8 +186,8 @@ macro_rules! serialize_unsigned {
 macro_rules! serialize_signed {
     ($self:ident, $N:expr, $v:expr, $ixx:ident, $uxx:ident) => {{
         let v = $v;
-        let (signed, mut v) = if v == $ixx::min_value() {
-            (true, $ixx::max_value() as $uxx + 1)
+        let (signed, mut v) = if v == $ixx::MIN {
+            (true, $ixx::MAX as $uxx + 1)
         } else if v < 0 {
             (true, -v as $uxx)
         } else {
@@ -339,9 +339,9 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self.extend_from_slice(b"null")
     }
 
-    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         value.serialize(self)
     }
@@ -363,14 +363,14 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self.serialize_str(variant)
     }
 
-    fn serialize_newtype_struct<T: ?Sized>(self, _name: &'static str, value: &T) -> Result<Self::Ok>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         value.serialize(self)
     }
 
-    fn serialize_newtype_variant<T: ?Sized>(
+    fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,
         _variant_index: u32,
@@ -378,7 +378,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         value: &T,
     ) -> Result<Self::Ok>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         self.push(b'{')?;
         let mut s = SerializeStruct::new(self);
@@ -441,9 +441,9 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         Ok(SerializeStructVariant::new(self))
     }
 
-    fn collect_str<T: ?Sized>(self, value: &T) -> Result<Self::Ok>
+    fn collect_str<T>(self, value: &T) -> Result<Self::Ok>
     where
-        T: fmt::Display,
+        T: fmt::Display + ?Sized,
     {
         self.push(b'"')?;
 
@@ -715,7 +715,7 @@ mod tests {
 
         assert_eq!(
             &*crate::to_string::<_, N>(&Temperature {
-                temperature: -2.3456789012345e-23
+                temperature: -2.345_678_8e-23
             })
             .unwrap(),
             r#"{"temperature":-2.3456788e-23}"#
@@ -871,7 +871,7 @@ mod tests {
             {
                 let mut aux: String<{ N }> = String::new();
                 write!(aux, "{:.2}", self.0).unwrap();
-                serializer.serialize_bytes(&aux.as_bytes())
+                serializer.serialize_bytes(aux.as_bytes())
             }
         }
 
@@ -881,7 +881,7 @@ mod tests {
         let sd2 = SimpleDecimal(0.000);
         assert_eq!(&*crate::to_string::<_, N>(&sd2).unwrap(), r#"0.00"#);
 
-        let sd3 = SimpleDecimal(22222.777777);
+        let sd3 = SimpleDecimal(22_222.777);
         assert_eq!(&*crate::to_string::<_, N>(&sd3).unwrap(), r#"22222.78"#);
     }
 }

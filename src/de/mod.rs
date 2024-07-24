@@ -758,7 +758,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use core::str::FromStr;
+
     use serde_derive::Deserialize;
 
     #[derive(Debug, Deserialize, PartialEq)]

@@ -17,9 +17,9 @@ impl<'a, 'b: 'a> ser::SerializeStruct for SerializeStruct<'a, 'b> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<()>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         // XXX if `value` is `None` we not produce any output for this field
         if !self.first {
@@ -57,9 +57,9 @@ impl<'a, 'b: 'a> ser::SerializeStructVariant for SerializeStructVariant<'a, 'b> 
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<()>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         // XXX if `value` is `None` we not produce any output for this field
         if !self.first {
