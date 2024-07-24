@@ -65,10 +65,7 @@ pub mod de;
 pub mod ser;
 
 #[doc(inline)]
-pub use self::de::{
-    from_slice, from_slice_using_string_unescape_buffer, from_str,
-    from_str_using_string_unescape_buffer,
-};
+pub use self::de::{from_slice, from_slice_escaped, from_str, from_str_escaped};
 #[doc(inline)]
 pub use self::ser::to_slice;
 #[cfg(feature = "heapless")]

@@ -833,7 +833,7 @@ impl fmt::Display for Error {
 
 /// Deserializes an instance of type `T` from bytes of JSON text, using the provided buffer to unescape strings
 /// Returns the value and the number of bytes consumed in the process
-pub fn from_slice_using_string_unescape_buffer<'a, T>(
+pub fn from_slice_escaped<'a, T>(
     v: &'a [u8],
     string_unescape_buffer: &mut [u8],
 ) -> Result<(T, usize)>
@@ -853,7 +853,7 @@ pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
-    from_slice_using_string_unescape_buffer(v, &mut []).map_err(|error| {
+    from_slice_escaped(v, &mut []).map_err(|error| {
         if let Error::EscapedStringIsTooLong = error {
             Error::EscapedStringRequiresBuffer
         } else {
@@ -863,14 +863,11 @@ where
 }
 
 /// Deserializes an instance of type T from a string of JSON text, using the provided buffer to unescape strings
-pub fn from_str_using_string_unescape_buffer<'a, T>(
-    s: &'a str,
-    string_unescape_buffer: &mut [u8],
-) -> Result<(T, usize)>
+pub fn from_str_escaped<'a, T>(s: &'a str, string_unescape_buffer: &mut [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
-    from_slice_using_string_unescape_buffer(s.as_bytes(), string_unescape_buffer)
+    from_slice_escaped(s.as_bytes(), string_unescape_buffer)
 }
 
 /// Deserializes an instance of type T from a string of JSON text
@@ -949,7 +946,7 @@ mod tests {
         fn from_str_test<'de, T: serde::Deserialize<'de>>(
             s: &'de str,
         ) -> super::Result<(T, usize)> {
-            crate::from_str_using_string_unescape_buffer(s, &mut [0; 8])
+            crate::from_str_escaped(s, &mut [0; 8])
         }
 
         assert_eq!(from_str_test(r#""n""#), Ok(('n', 3)));
@@ -981,7 +978,7 @@ mod tests {
         fn from_str_test<'de, T: serde::Deserialize<'de>>(
             s: &'de str,
         ) -> super::Result<(T, usize)> {
-            crate::from_str_using_string_unescape_buffer(s, &mut [0; 16])
+            crate::from_str_escaped(s, &mut [0; 16])
         }
 
         // escaped " in the string content
@@ -1027,7 +1024,7 @@ mod tests {
         fn from_str_test<'de, T: serde::Deserialize<'de>>(
             s: &'de str,
         ) -> super::Result<(T, usize)> {
-            crate::from_str_using_string_unescape_buffer(s, &mut [0; 16])
+            crate::from_str_escaped(s, &mut [0; 16])
         }
 
         // The combined length of the first and third strings are longer than the buffer, but that's OK,
