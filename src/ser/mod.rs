@@ -4,8 +4,8 @@ use core::mem::MaybeUninit;
 use core::{fmt, str};
 
 use serde::ser;
-use serde::Serialize;
 use serde::ser::SerializeStruct as _;
+use serde::Serialize;
 
 #[cfg(feature = "heapless")]
 use heapless::{String, Vec};
