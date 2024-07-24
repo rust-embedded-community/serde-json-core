@@ -937,18 +937,18 @@ mod tests {
 
     #[test]
     fn char() {
-        assert_eq!(crate::from_str("\"n\""), Ok(('n', 3)));
-        assert_eq!(crate::from_str("\"\\\"\""), Ok(('"', 4)));
-        assert_eq!(crate::from_str("\"\\\\\""), Ok(('\\', 4)));
-        assert_eq!(crate::from_str("\"/\""), Ok(('/', 3)));
-        assert_eq!(crate::from_str("\"\\b\""), Ok(('\x08', 4)));
-        assert_eq!(crate::from_str("\"\\f\""), Ok(('\x0C', 4)));
-        assert_eq!(crate::from_str("\"\\n\""), Ok(('\n', 4)));
-        assert_eq!(crate::from_str("\"\\r\""), Ok(('\r', 4)));
-        assert_eq!(crate::from_str("\"\\t\""), Ok(('\t', 4)));
-        assert_eq!(crate::from_str("\"\\u000b\""), Ok(('\x0B', 8)));
-        assert_eq!(crate::from_str("\"\\u000B\""), Ok(('\x0B', 8)));
-        assert_eq!(crate::from_str("\"\u{3A3}\""), Ok(('\u{3A3}', 4)));
+        assert_eq!(crate::from_str(r#""n""#), Ok(('n', 3)));
+        assert_eq!(crate::from_str(r#""\"""#), Ok(('"', 4)));
+        assert_eq!(crate::from_str(r#""\\""#), Ok(('\\', 4)));
+        assert_eq!(crate::from_str(r#""/""#), Ok(('/', 3)));
+        assert_eq!(crate::from_str(r#""\b""#), Ok(('\x08', 4)));
+        assert_eq!(crate::from_str(r#""\f""#), Ok(('\x0C', 4)));
+        assert_eq!(crate::from_str(r#""\n""#), Ok(('\n', 4)));
+        assert_eq!(crate::from_str(r#""\r""#), Ok(('\r', 4)));
+        assert_eq!(crate::from_str(r#""\t""#), Ok(('\t', 4)));
+        assert_eq!(crate::from_str(r#""\u000b""#), Ok(('\x0B', 8)));
+        assert_eq!(crate::from_str(r#""\u000B""#), Ok(('\x0B', 8)));
+        assert_eq!(crate::from_str(r#""Σ""#), Ok(('Σ', 4)));
     }
 
     #[test]
