@@ -506,10 +506,17 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
                                     Some(b'r') => b'\r',
                                     Some(b't') => b'\t',
                                     Some(b'u') => {
+                                        // TODO - Replace with `<[u8]>::split_first_chunk::<4>` once MSRV >= 1.77
+                                        fn split_first_slice(
+                                            bytes: &[u8],
+                                            len: usize,
+                                        ) -> Option<(&[u8], &[u8])>
+                                        {
+                                            Some((bytes.get(..len)?, bytes.get(len..)?))
+                                        }
+
                                         let (escape_sequence, remaining_escaped_string_bytes) =
-                                            escaped_string_bytes
-                                                .as_slice()
-                                                .split_first_chunk::<4>()
+                                            split_first_slice(escaped_string_bytes.as_slice(), 4)
                                                 .ok_or(Error::InvalidEscapeSequence)?;
 
                                         escaped_string_bytes =
