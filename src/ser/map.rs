@@ -22,9 +22,9 @@ impl<'a, 'b: 'a> ser::SerializeMap for SerializeMap<'a, 'b> {
         Ok(())
     }
 
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<()>
+    fn serialize_key<T>(&mut self, key: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         if !self.first {
             self.ser.push(b',')?;
@@ -35,9 +35,9 @@ impl<'a, 'b: 'a> ser::SerializeMap for SerializeMap<'a, 'b> {
         Ok(())
     }
 
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<()>
+    fn serialize_value<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         value.serialize(&mut *self.ser)?;
         Ok(())

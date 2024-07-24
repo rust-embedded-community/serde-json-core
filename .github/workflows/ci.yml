@@ -1,7 +1,8 @@
 on:
   push:
-    branches: [ staging, trying, master ]
+    branches: [ master ]
   pull_request:
+    branches: [ master ]
 
 name: Continuous integration
 
@@ -30,19 +31,32 @@ jobs:
             TARGET: x86_64-unknown-linux-gnu
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.TARGET }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --target=${{ matrix.TARGET }}
-      - uses: actions-rs/cargo@v1
+
+      - run: cargo build --target=${{ matrix.TARGET }}
+
+      - run: cargo test --target=${{ matrix.TARGET }} --all-features
         if: ${{ contains(matrix.TARGET, 'x86_64') }}
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          command: test
-          args: --target=${{ matrix.TARGET }} --all-features
+          components: clippy
+
+      - run: cargo clippy
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all -- --check
