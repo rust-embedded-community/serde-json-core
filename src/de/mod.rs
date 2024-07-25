@@ -71,9 +71,6 @@ pub enum Error {
     /// Invalid String Escape Sequence
     InvalidEscapeSequence,
 
-    /// Unescaping and Escaped String requires a buffer
-    EscapedStringRequiresBuffer,
-
     /// Escaped String length exceeds buffer size
     EscapedStringIsTooLong,
 
@@ -102,12 +99,16 @@ impl serde::de::StdError for Error {}
 pub struct Deserializer<'b, 's> {
     slice: &'b [u8],
     index: usize,
-    string_unescape_buffer: &'s mut [u8],
+    string_unescape_buffer: Option<&'s mut [u8]>,
 }
 
 impl<'a, 's> Deserializer<'a, 's> {
-    /// Create a new `Deserializer`
-    pub fn new(slice: &'a [u8], string_unescape_buffer: &'s mut [u8]) -> Deserializer<'a, 's> {
+    /// Create a new `Deserializer`, optionally with a buffer to use to unescape strings.
+    /// If not present, strings are not unescaped.
+    pub fn new(
+        slice: &'a [u8],
+        string_unescape_buffer: Option<&'s mut [u8]>,
+    ) -> Deserializer<'a, 's> {
         Deserializer {
             slice,
             index: 0,
@@ -193,6 +194,12 @@ impl<'a, 's> Deserializer<'a, 's> {
     }
 
     fn parse_str(&mut self) -> Result<&'a str> {
+        if self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? == b'"' {
+            self.eat_char();
+        } else {
+            return Err(Error::InvalidType);
+        }
+
         let start = self.index;
         loop {
             match self.peek() {
@@ -478,97 +485,89 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     where
         V: Visitor<'de>,
     {
-        let peek = self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        let s = self.parse_str()?;
 
-        match peek {
-            b'"' => {
-                self.eat_char();
+        if let Some(string_unescape_buffer) = self.string_unescape_buffer.as_deref_mut() {
+            if s.as_bytes().contains(&b'\\') {
+                let mut string_unescape_buffer_slots = string_unescape_buffer.iter_mut();
 
-                let s = self.parse_str()?;
+                // We've already checked that the string is valid UTF-8, so the only b'\\' is the start of escape sequence
+                let mut escaped_string_bytes = s.as_bytes().iter();
 
-                if s.as_bytes().contains(&b'\\') {
-                    let mut string_unescape_buffer_slots = self.string_unescape_buffer.iter_mut();
+                loop {
+                    match escaped_string_bytes.next().copied() {
+                        None => break,
+                        Some(b'\\') => {
+                            let unescaped_byte = match escaped_string_bytes.next() {
+                                Some(b'"') => b'"',
+                                Some(b'\\') => b'\\',
+                                Some(b'/') => b'/',
+                                Some(b'b') => 0x8,
+                                Some(b'f') => 0xC,
+                                Some(b'n') => b'\n',
+                                Some(b'r') => b'\r',
+                                Some(b't') => b'\t',
+                                Some(b'u') => {
+                                    // TODO - Replace with `<[u8]>::split_first_chunk::<4>` once MSRV >= 1.77
+                                    fn split_first_slice(
+                                        bytes: &[u8],
+                                        len: usize,
+                                    ) -> Option<(&[u8], &[u8])>
+                                    {
+                                        Some((bytes.get(..len)?, bytes.get(len..)?))
+                                    }
 
-                    // We've already checked that the string is valid UTF-8, so the only b'\\' is the start of escape sequence
-                    let mut escaped_string_bytes = s.as_bytes().iter();
-
-                    loop {
-                        match escaped_string_bytes.next().copied() {
-                            None => break,
-                            Some(b'\\') => {
-                                let unescaped_byte = match escaped_string_bytes.next() {
-                                    Some(b'"') => b'"',
-                                    Some(b'\\') => b'\\',
-                                    Some(b'/') => b'/',
-                                    Some(b'b') => 0x8,
-                                    Some(b'f') => 0xC,
-                                    Some(b'n') => b'\n',
-                                    Some(b'r') => b'\r',
-                                    Some(b't') => b'\t',
-                                    Some(b'u') => {
-                                        // TODO - Replace with `<[u8]>::split_first_chunk::<4>` once MSRV >= 1.77
-                                        fn split_first_slice(
-                                            bytes: &[u8],
-                                            len: usize,
-                                        ) -> Option<(&[u8], &[u8])>
-                                        {
-                                            Some((bytes.get(..len)?, bytes.get(len..)?))
-                                        }
-
-                                        let (escape_sequence, remaining_escaped_string_bytes) =
-                                            split_first_slice(escaped_string_bytes.as_slice(), 4)
-                                                .ok_or(Error::InvalidEscapeSequence)?;
-
-                                        escaped_string_bytes =
-                                            remaining_escaped_string_bytes.iter();
-
-                                        let unescaped_char = core::str::from_utf8(escape_sequence)
-                                            .ok()
-                                            .and_then(|escape_sequence| {
-                                                u32::from_str_radix(escape_sequence, 16).ok()
-                                            })
-                                            .and_then(char::from_u32)
+                                    let (escape_sequence, remaining_escaped_string_bytes) =
+                                        split_first_slice(escaped_string_bytes.as_slice(), 4)
                                             .ok_or(Error::InvalidEscapeSequence)?;
 
-                                        for &unescaped_byte in
-                                            unescaped_char.encode_utf8(&mut [0; 4]).as_bytes()
-                                        {
-                                            *string_unescape_buffer_slots
-                                                .next()
-                                                .ok_or(Error::EscapedStringIsTooLong)? =
-                                                unescaped_byte;
-                                        }
+                                    escaped_string_bytes = remaining_escaped_string_bytes.iter();
 
-                                        continue;
+                                    let unescaped_char = core::str::from_utf8(escape_sequence)
+                                        .ok()
+                                        .and_then(|escape_sequence| {
+                                            u32::from_str_radix(escape_sequence, 16).ok()
+                                        })
+                                        .and_then(char::from_u32)
+                                        .ok_or(Error::InvalidEscapeSequence)?;
+
+                                    for &unescaped_byte in
+                                        unescaped_char.encode_utf8(&mut [0; 4]).as_bytes()
+                                    {
+                                        *string_unescape_buffer_slots
+                                            .next()
+                                            .ok_or(Error::EscapedStringIsTooLong)? = unescaped_byte;
                                     }
-                                    _ => return Err(Error::InvalidEscapeSequence),
-                                };
 
-                                *string_unescape_buffer_slots
-                                    .next()
-                                    .ok_or(Error::EscapedStringIsTooLong)? = unescaped_byte;
-                            }
-                            Some(c) => {
-                                *string_unescape_buffer_slots
-                                    .next()
-                                    .ok_or(Error::EscapedStringIsTooLong)? = c;
-                            }
+                                    continue;
+                                }
+                                _ => return Err(Error::InvalidEscapeSequence),
+                            };
+
+                            *string_unescape_buffer_slots
+                                .next()
+                                .ok_or(Error::EscapedStringIsTooLong)? = unescaped_byte;
+                        }
+                        Some(c) => {
+                            *string_unescape_buffer_slots
+                                .next()
+                                .ok_or(Error::EscapedStringIsTooLong)? = c;
                         }
                     }
-
-                    let remaining_length = string_unescape_buffer_slots.len();
-                    let unescaped_string_length =
-                        self.string_unescape_buffer.len() - remaining_length;
-
-                    visitor.visit_str(
-                        str::from_utf8(&self.string_unescape_buffer[..unescaped_string_length])
-                            .map_err(|_| Error::InvalidUnicodeCodePoint)?,
-                    )
-                } else {
-                    visitor.visit_borrowed_str(s)
                 }
+
+                let remaining_length = string_unescape_buffer_slots.len();
+                let unescaped_string_length = string_unescape_buffer.len() - remaining_length;
+
+                visitor.visit_str(
+                    str::from_utf8(&string_unescape_buffer[..unescaped_string_length])
+                        .map_err(|_| Error::InvalidUnicodeCodePoint)?,
+                )
+            } else {
+                visitor.visit_borrowed_str(s)
             }
-            _ => Err(Error::InvalidType),
+        } else {
+            visitor.visit_borrowed_str(s)
         }
     }
 
@@ -839,11 +838,9 @@ impl fmt::Display for Error {
     }
 }
 
-/// Deserializes an instance of type `T` from bytes of JSON text, using the provided buffer to unescape strings
-/// Returns the value and the number of bytes consumed in the process
-pub fn from_slice_escaped<'a, T>(
+fn from_slice_maybe_escaped<'a, T>(
     v: &'a [u8],
-    string_unescape_buffer: &mut [u8],
+    string_unescape_buffer: Option<&mut [u8]>,
 ) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
@@ -855,19 +852,25 @@ where
     Ok((value, length))
 }
 
+/// Deserializes an instance of type `T` from bytes of JSON text, using the provided buffer to unescape strings
+/// Returns the value and the number of bytes consumed in the process
+pub fn from_slice_escaped<'a, T>(
+    v: &'a [u8],
+    string_unescape_buffer: &mut [u8],
+) -> Result<(T, usize)>
+where
+    T: de::Deserialize<'a>,
+{
+    from_slice_maybe_escaped(v, Some(string_unescape_buffer))
+}
+
 /// Deserializes an instance of type `T` from bytes of JSON text
 /// Returns the value and the number of bytes consumed in the process
 pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
-    from_slice_escaped(v, &mut []).map_err(|error| {
-        if let Error::EscapedStringIsTooLong = error {
-            Error::EscapedStringRequiresBuffer
-        } else {
-            error
-        }
-    })
+    from_slice_maybe_escaped(v, None)
 }
 
 /// Deserializes an instance of type T from a string of JSON text, using the provided buffer to unescape strings
