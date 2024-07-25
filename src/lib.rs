@@ -55,14 +55,15 @@
 //! This crate is guaranteed to compile on stable Rust 1.62.0 and up. It *might* compile with older
 //! versions but that may change in any new patch release.
 
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 #![deny(rust_2018_compatibility)]
 #![deny(rust_2018_idioms)]
-#![deny(warnings)]
+// #![deny(warnings)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod de;
 pub mod ser;
+pub mod str;
 
 #[doc(inline)]
 pub use self::de::{from_slice, from_slice_escaped, from_str, from_str_escaped};

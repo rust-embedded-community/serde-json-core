@@ -95,6 +95,14 @@ pub enum Error {
 
 impl serde::de::StdError for Error {}
 
+impl From<crate::str::StringUnescapeError> for Error {
+    fn from(error: crate::str::StringUnescapeError) -> Self {
+        match error {
+            crate::str::StringUnescapeError::InvalidEscapeSequence => Self::InvalidEscapeSequence,
+        }
+    }
+}
+
 /// A structure that deserializes Rust values from JSON in a buffer.
 pub struct Deserializer<'b, 's> {
     slice: &'b [u8],
@@ -485,89 +493,43 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     where
         V: Visitor<'de>,
     {
-        let s = self.parse_str()?;
+        let escaped_string = self.parse_str()?;
 
         if let Some(string_unescape_buffer) = self.string_unescape_buffer.as_deref_mut() {
-            if s.as_bytes().contains(&b'\\') {
-                let mut string_unescape_buffer_slots = string_unescape_buffer.iter_mut();
+            if escaped_string.as_bytes().contains(&b'\\') {
+                let mut string_unescape_buffer_write_position = 0;
 
-                // We've already checked that the string is valid UTF-8, so the only b'\\' is the start of escape sequence
-                let mut escaped_string_bytes = s.as_bytes().iter();
+                for fragment in crate::str::unescape_fragments(escaped_string) {
+                    let char_encode_buffer = &mut [0; 4];
 
-                loop {
-                    match escaped_string_bytes.next().copied() {
-                        None => break,
-                        Some(b'\\') => {
-                            let unescaped_byte = match escaped_string_bytes.next() {
-                                Some(b'"') => b'"',
-                                Some(b'\\') => b'\\',
-                                Some(b'/') => b'/',
-                                Some(b'b') => 0x8,
-                                Some(b'f') => 0xC,
-                                Some(b'n') => b'\n',
-                                Some(b'r') => b'\r',
-                                Some(b't') => b'\t',
-                                Some(b'u') => {
-                                    // TODO - Replace with `<[u8]>::split_first_chunk::<4>` once MSRV >= 1.77
-                                    fn split_first_slice(
-                                        bytes: &[u8],
-                                        len: usize,
-                                    ) -> Option<(&[u8], &[u8])>
-                                    {
-                                        Some((bytes.get(..len)?, bytes.get(len..)?))
-                                    }
-
-                                    let (escape_sequence, remaining_escaped_string_bytes) =
-                                        split_first_slice(escaped_string_bytes.as_slice(), 4)
-                                            .ok_or(Error::InvalidEscapeSequence)?;
-
-                                    escaped_string_bytes = remaining_escaped_string_bytes.iter();
-
-                                    let unescaped_char = core::str::from_utf8(escape_sequence)
-                                        .ok()
-                                        .and_then(|escape_sequence| {
-                                            u32::from_str_radix(escape_sequence, 16).ok()
-                                        })
-                                        .and_then(char::from_u32)
-                                        .ok_or(Error::InvalidEscapeSequence)?;
-
-                                    for &unescaped_byte in
-                                        unescaped_char.encode_utf8(&mut [0; 4]).as_bytes()
-                                    {
-                                        *string_unescape_buffer_slots
-                                            .next()
-                                            .ok_or(Error::EscapedStringIsTooLong)? = unescaped_byte;
-                                    }
-
-                                    continue;
-                                }
-                                _ => return Err(Error::InvalidEscapeSequence),
-                            };
-
-                            *string_unescape_buffer_slots
-                                .next()
-                                .ok_or(Error::EscapedStringIsTooLong)? = unescaped_byte;
+                    let unescaped_bytes = match fragment? {
+                        crate::str::EscapedStringFragment::NotEscaped(fragment) => {
+                            fragment.as_bytes()
                         }
-                        Some(c) => {
-                            *string_unescape_buffer_slots
-                                .next()
-                                .ok_or(Error::EscapedStringIsTooLong)? = c;
+                        crate::str::EscapedStringFragment::Escaped(c) => {
+                            c.encode_utf8(char_encode_buffer).as_bytes()
                         }
-                    }
+                    };
+
+                    string_unescape_buffer[string_unescape_buffer_write_position..]
+                        .get_mut(..unescaped_bytes.len())
+                        .ok_or(Error::EscapedStringIsTooLong)?
+                        .copy_from_slice(unescaped_bytes);
+
+                    string_unescape_buffer_write_position += unescaped_bytes.len();
                 }
 
-                let remaining_length = string_unescape_buffer_slots.len();
-                let unescaped_string_length = string_unescape_buffer.len() - remaining_length;
-
                 visitor.visit_str(
-                    str::from_utf8(&string_unescape_buffer[..unescaped_string_length])
-                        .map_err(|_| Error::InvalidUnicodeCodePoint)?,
+                    str::from_utf8(
+                        &string_unescape_buffer[..string_unescape_buffer_write_position],
+                    )
+                    .map_err(|_| Error::InvalidUnicodeCodePoint)?,
                 )
             } else {
-                visitor.visit_borrowed_str(s)
+                visitor.visit_borrowed_str(escaped_string)
             }
         } else {
-            visitor.visit_borrowed_str(s)
+            visitor.visit_borrowed_str(escaped_string)
         }
     }
 
@@ -638,11 +600,34 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     }
 
     /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_newtype_struct(self)
+        if name == crate::str::EscapedStr::NAME {
+            struct EscapedStringDeserializer<'a, 'de, 's>(&'a mut Deserializer<'de, 's>);
+
+            impl<'a, 'de, 's> serde::Deserializer<'de> for EscapedStringDeserializer<'a, 'de, 's> {
+                type Error = Error;
+
+                fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+                where
+                    V: Visitor<'de>,
+                {
+                    visitor.visit_borrowed_str(self.0.parse_str()?)
+                }
+
+                serde::forward_to_deserialize_any! {
+                    bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+                    bytes byte_buf option unit unit_struct newtype_struct seq tuple
+                    tuple_struct map struct enum identifier ignored_any
+                }
+            }
+
+            visitor.visit_newtype_struct(EscapedStringDeserializer(self))
+        } else {
+            visitor.visit_newtype_struct(self)
+        }
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
@@ -1055,6 +1040,14 @@ mod tests {
                 ),
                 68
             ))
+        );
+    }
+
+    #[test]
+    fn escaped_str() {
+        assert_eq!(
+            crate::from_str(r#""Hello\nWorld""#),
+            Ok((crate::str::EscapedStr::new(r#"Hello\nWorld"#).unwrap(), 14))
         );
     }
 
