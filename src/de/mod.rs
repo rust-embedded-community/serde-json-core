@@ -968,7 +968,7 @@ mod tests {
         assert_eq!(crate::from_str(r#" "👏" "#), Ok(("👏", 8)));
 
         fn s(s: &'static str) -> heapless::String<1024> {
-            core::str::FromStr::from_str(s).expect("Failed to create test string")
+            s.parse().expect("Failed to create test string")
         }
 
         fn from_str_test<'de, T: serde::Deserialize<'de>>(
@@ -1014,7 +1014,7 @@ mod tests {
     #[test]
     fn tuple_of_str() {
         fn s(s: &'static str) -> heapless::String<1024> {
-            core::str::FromStr::from_str(s).expect("Failed to create test string")
+            s.parse().expect("Failed to create test string")
         }
 
         fn from_str_test<'de, T: serde::Deserialize<'de>>(
@@ -1271,10 +1271,9 @@ mod tests {
         assert_eq!(
             crate::from_str::<Xy>(r#"[10]"#),
             Err(crate::de::Error::CustomErrorWithMessage(
-                core::str::FromStr::from_str(
-                    "invalid length 1, expected tuple struct Xy with 2 elements"
-                )
-                .unwrap()
+                "invalid length 1, expected tuple struct Xy with 2 elements"
+                    .parse()
+                    .unwrap()
             ))
         );
         assert_eq!(
@@ -1381,9 +1380,7 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("something bad happened"),
-            crate::de::Error::CustomErrorWithMessage(
-                core::str::FromStr::from_str("something bad happened").unwrap()
-            )
+            crate::de::Error::CustomErrorWithMessage("something bad happened".parse().unwrap())
         );
     }
 
@@ -1393,8 +1390,8 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("0123456789012345678901234567890123456789012345678901234567890123 <- after here the message should be truncated"),
-            crate::de::Error::CustomErrorWithMessage(core::str::FromStr::from_str(
-                "0123456789012345678901234567890123456789012345678901234567890123").unwrap()
+            crate::de::Error::CustomErrorWithMessage(
+                "0123456789012345678901234567890123456789012345678901234567890123".parse().unwrap()
             )
         );
     }
