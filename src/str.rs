@@ -55,50 +55,13 @@ fn unescape_next_fragment(
     })
 }
 
-pub(crate) fn unescape_fragments(
-    mut escaped_string: &str,
-) -> impl Iterator<Item = Result<EscapedStringFragment<'_>, StringUnescapeError>> {
-    core::iter::from_fn(move || {
-        if escaped_string.is_empty() {
-            None
-        } else {
-            Some(
-                unescape_next_fragment(escaped_string).map(|(fragment, rest)| {
-                    escaped_string = rest;
-                    fragment
-                }),
-            )
-        }
-    })
-}
-
 /// A borrowed escaped string
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename = "__serde_json_core_escaped_string__")]
-pub struct EscapedStr<'a>(&'a str);
+pub struct EscapedStr<'a>(pub &'a str);
 
 impl<'a> EscapedStr<'a> {
     pub(crate) const NAME: &'static str = "__serde_json_core_escaped_string__";
-
-    /// Create a new EscapedString, verifying that it's correctly escaped
-    pub fn new(escaped_string: &'a str) -> Result<Self, StringUnescapeError> {
-        // Check that all fragments are valid
-        for fragment in unescape_fragments(escaped_string) {
-            fragment?;
-        }
-
-        // SAFETY: we've just checked that all fragments are valid
-        unsafe { Ok(Self::new_unchecked(escaped_string)) }
-    }
-
-    /// Create a new EscapedString without verifying that it's correctly escaped
-    ///
-    /// # Safety
-    ///
-    /// escaped_string must be a correctly escaped JSON string without the surrounding quotes.
-    pub unsafe fn new_unchecked(escaped_string: &'a str) -> Self {
-        Self(escaped_string)
-    }
 
     pub fn fragments(&self) -> EscapedStringFragmentIter<'a> {
         EscapedStringFragmentIter(self.0)
@@ -114,26 +77,17 @@ impl<'a> EscapedStringFragmentIter<'a> {
 }
 
 impl<'a> Iterator for EscapedStringFragmentIter<'a> {
-    type Item = EscapedStringFragment<'a>;
+    type Item = Result<EscapedStringFragment<'a>, StringUnescapeError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.0.is_empty() {
             return None;
         }
 
-        let fragment_result = unescape_next_fragment(self.0);
+        Some(unescape_next_fragment(self.0).map(|(fragment, rest)| {
+            self.0 = rest;
 
-        debug_assert!(
-            fragment_result.is_ok(),
-            "{:?} must be valid",
-            fragment_result
-        );
-
-        // In release, if there's been a logic error, return early as it's better than panicing
-        let (fragment, rest) = fragment_result.ok()?;
-
-        self.0 = rest;
-
-        Some(fragment)
+            fragment
+        }))
     }
 }

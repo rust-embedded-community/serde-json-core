@@ -499,7 +499,7 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
             if escaped_string.as_bytes().contains(&b'\\') {
                 let mut string_unescape_buffer_write_position = 0;
 
-                for fragment in crate::str::unescape_fragments(escaped_string) {
+                for fragment in crate::str::EscapedStr(escaped_string).fragments() {
                     let char_encode_buffer = &mut [0; 4];
 
                     let unescaped_bytes = match fragment? {
@@ -1047,7 +1047,7 @@ mod tests {
     fn escaped_str() {
         assert_eq!(
             crate::from_str(r#""Hello\nWorld""#),
-            Ok((crate::str::EscapedStr::new(r#"Hello\nWorld"#).unwrap(), 14))
+            Ok((crate::str::EscapedStr(r#"Hello\nWorld"#), 14))
         );
     }
 

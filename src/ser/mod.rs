@@ -831,8 +831,7 @@ mod tests {
     #[test]
     fn escaped_str() {
         assert_eq!(
-            crate::to_string::<_, N>(&crate::str::EscapedStr::new(r#"Hello\\nWorld"#).unwrap())
-                .unwrap(),
+            crate::to_string::<_, N>(&crate::str::EscapedStr(r#"Hello\\nWorld"#)).unwrap(),
             r#""Hello\\nWorld""#
         );
     }
