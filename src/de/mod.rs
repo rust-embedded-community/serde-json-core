@@ -495,42 +495,40 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     {
         let escaped_string = self.parse_str()?;
 
-        if let Some(string_unescape_buffer) = self.string_unescape_buffer.as_deref_mut() {
-            if escaped_string.as_bytes().contains(&b'\\') {
-                let mut string_unescape_buffer_write_position = 0;
+        // If the unescape buffer is not provided, skip unescaping strings
+        let Some(string_unescape_buffer) = self.string_unescape_buffer.as_deref_mut() else {
+            return visitor.visit_borrowed_str(escaped_string);
+        };
 
-                for fragment in crate::str::EscapedStr(escaped_string).fragments() {
-                    let char_encode_buffer = &mut [0; 4];
-
-                    let unescaped_bytes = match fragment? {
-                        crate::str::EscapedStringFragment::NotEscaped(fragment) => {
-                            fragment.as_bytes()
-                        }
-                        crate::str::EscapedStringFragment::Escaped(c) => {
-                            c.encode_utf8(char_encode_buffer).as_bytes()
-                        }
-                    };
-
-                    string_unescape_buffer[string_unescape_buffer_write_position..]
-                        .get_mut(..unescaped_bytes.len())
-                        .ok_or(Error::EscapedStringIsTooLong)?
-                        .copy_from_slice(unescaped_bytes);
-
-                    string_unescape_buffer_write_position += unescaped_bytes.len();
-                }
-
-                visitor.visit_str(
-                    str::from_utf8(
-                        &string_unescape_buffer[..string_unescape_buffer_write_position],
-                    )
-                    .map_err(|_| Error::InvalidUnicodeCodePoint)?,
-                )
-            } else {
-                visitor.visit_borrowed_str(escaped_string)
-            }
-        } else {
-            visitor.visit_borrowed_str(escaped_string)
+        // If the escaped string doesn't contain '\\', it' can't have any escaped characters
+        if !escaped_string.as_bytes().contains(&b'\\') {
+            return visitor.visit_borrowed_str(escaped_string);
         }
+
+        let mut string_unescape_buffer_write_position = 0;
+
+        for fragment in crate::str::EscapedStr(escaped_string).fragments() {
+            let char_encode_buffer = &mut [0; 4];
+
+            let unescaped_bytes = match fragment? {
+                crate::str::EscapedStringFragment::NotEscaped(fragment) => fragment.as_bytes(),
+                crate::str::EscapedStringFragment::Escaped(c) => {
+                    c.encode_utf8(char_encode_buffer).as_bytes()
+                }
+            };
+
+            string_unescape_buffer[string_unescape_buffer_write_position..]
+                .get_mut(..unescaped_bytes.len())
+                .ok_or(Error::EscapedStringIsTooLong)?
+                .copy_from_slice(unescaped_bytes);
+
+            string_unescape_buffer_write_position += unescaped_bytes.len();
+        }
+
+        visitor.visit_str(
+            str::from_utf8(&string_unescape_buffer[..string_unescape_buffer_write_position])
+                .map_err(|_| Error::InvalidUnicodeCodePoint)?,
+        )
     }
 
     /// Unsupported. String is not available in no-std.
