@@ -599,7 +599,6 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
         self.deserialize_unit(visitor)
     }
 
-    /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
     fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
