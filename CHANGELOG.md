@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Breaking
+- MSRV is now `1.65.0`.
+
 ### Added
 
 - Support for optional package `defmt` which allows for easy conversion for
 error types when using tools like `probe-rs` for logging over debuggers.
 - Implement `Serializer::collect_str`
 - Derive `Serialize` for `de::Error` and `ser::Error`
+- Support for deserializing escaped strings.
 
 ### Changed
 

@@ -201,6 +201,7 @@ impl<'a, 's> Deserializer<'a, 's> {
         }
     }
 
+    /// Parse a string, returning the escaped string.
     fn parse_str(&mut self) -> Result<&'a str> {
         if self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? == b'"' {
             self.eat_char();
@@ -601,7 +602,10 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     where
         V: Visitor<'de>,
     {
+        // If the newtype struct is an `EscapedStr`...
         if name == crate::str::EscapedStr::NAME {
+            // ...deserialize as an escaped string instead.
+
             struct EscapedStringDeserializer<'a, 'de, 's>(&'a mut Deserializer<'de, 's>);
 
             impl<'a, 'de, 's> serde::Deserializer<'de> for EscapedStringDeserializer<'a, 'de, 's> {
@@ -611,9 +615,13 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
                 where
                     V: Visitor<'de>,
                 {
+                    // The only structure which is deserialized at this point is an `EscapedStr`,
+                    // so pass the escaped string to its implementation of visit_borrowed_str.
+                    // This line defacto becomes `Ok(EscapedStr(self.0.parse_str()?))`.
                     visitor.visit_borrowed_str(self.0.parse_str()?)
                 }
 
+                // `EscapedStr` only deserializes strings, so we might as well forward all methods to `deserialize_any`.
                 serde::forward_to_deserialize_any! {
                     bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
                     bytes byte_buf option unit unit_struct newtype_struct seq tuple

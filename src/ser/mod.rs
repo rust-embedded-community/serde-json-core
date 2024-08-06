@@ -367,7 +367,10 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
     where
         T: ser::Serialize + ?Sized,
     {
+        // If the newtype struct is an `EscapedStr`...
         if name == crate::str::EscapedStr::NAME {
+            // serialize it as an already escaped string.
+
             struct EscapedStringSerializer<'a, 'b>(&'a mut Serializer<'b>);
 
             impl<'a, 'b: 'a> serde::Serializer for EscapedStringSerializer<'a, 'b> {

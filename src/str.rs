@@ -1,13 +1,36 @@
+//! Utilities for serializing and deserializing strings.
+
+use core::fmt;
+
 #[derive(Debug)]
+/// A fragment of an escaped string
 pub enum EscapedStringFragment<'a> {
+    /// A series of characters which weren't escaped in the input.
     NotEscaped(&'a str),
+    /// A character which was escaped in the input.
     Escaped(char),
 }
 
 #[derive(Debug)]
+/// Errors occuring while unescaping strings.
 pub enum StringUnescapeError {
+    /// Failed to unescape a character due to an invalid escape sequence.
     InvalidEscapeSequence,
 }
+
+impl fmt::Display for StringUnescapeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StringUnescapeError::InvalidEscapeSequence => write!(
+                f,
+                "Failed to unescape a character due to an invalid escape sequence."
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for StringUnescapeError {}
 
 fn unescape_next_fragment(
     escaped_string: &str,
@@ -55,7 +78,23 @@ fn unescape_next_fragment(
     })
 }
 
-/// A borrowed escaped string
+/// A borrowed escaped string. `EscapedStr` can be used to borrow an escaped string from the input,
+/// even when deserialized using `from_str_escaped` or `from_slice_escaped`.
+///
+/// ```
+///     #[derive(serde::Deserialize)]
+///     struct Event<'a> {
+///         name: heapless::String<16>,
+///         #[serde(borrow)]
+///         description: serde_json_core::str::EscapedStr<'a>,
+///     }
+///     
+///     serde_json_core::de::from_str_escaped::<Event<'_>>(
+///         r#"{ "name": "Party\u0021", "description": "I'm throwing a party! Hopefully the \u2600 shines!" }"#,
+///         &mut [0; 8],
+///     )
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename = "__serde_json_core_escaped_string__")]
 pub struct EscapedStr<'a>(pub &'a str);
@@ -63,14 +102,17 @@ pub struct EscapedStr<'a>(pub &'a str);
 impl<'a> EscapedStr<'a> {
     pub(crate) const NAME: &'static str = "__serde_json_core_escaped_string__";
 
+    /// Returns an iterator over the `EscapedStringFragment`s of an escaped string.
     pub fn fragments(&self) -> EscapedStringFragmentIter<'a> {
         EscapedStringFragmentIter(self.0)
     }
 }
 
+/// An iterator over the `EscapedStringFragment`s of an escaped string.
 pub struct EscapedStringFragmentIter<'a>(&'a str);
 
 impl<'a> EscapedStringFragmentIter<'a> {
+    /// Views the underlying data as a subslice of the original data.
     pub fn as_str(&self) -> EscapedStr<'a> {
         EscapedStr(self.0)
     }
