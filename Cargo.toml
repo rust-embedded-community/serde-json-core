@@ -36,4 +36,4 @@ serde_derive = "1.0.100"
 default = ["heapless"]
 custom-error-messages = ["heapless"]
 std = ["serde/std"]
-defmt-03 = ["defmt", "heapless?/defmt-03"]
+defmt = ["dep:defmt", "heapless?/defmt-03"]
