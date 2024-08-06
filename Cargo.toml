@@ -26,8 +26,7 @@ features = ["derive"]
 version = "1.0.100"
 
 [dependencies.defmt]
-version = "0.3.5"
-default-features = false
+version = "0.3"
 optional = true
 
 [dev-dependencies]
@@ -37,3 +36,4 @@ serde_derive = "1.0.100"
 default = ["heapless"]
 custom-error-messages = ["heapless"]
 std = ["serde/std"]
+defmt = ["dep:defmt", "heapless?/defmt-03"]
