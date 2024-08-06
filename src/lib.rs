@@ -52,7 +52,7 @@
 //!
 //! # Minimum Supported Rust Version (MSRV)
 //!
-//! This crate is guaranteed to compile on stable Rust 1.62.0 and up. It *might* compile with older
+//! This crate is guaranteed to compile on stable Rust 1.65.0 and up. It *might* compile with older
 //! versions but that may change in any new patch release.
 
 #![deny(missing_docs)]
@@ -63,9 +63,10 @@
 
 pub mod de;
 pub mod ser;
+pub mod str;
 
 #[doc(inline)]
-pub use self::de::{from_slice, from_str};
+pub use self::de::{from_slice, from_slice_escaped, from_str, from_str_escaped};
 #[doc(inline)]
 pub use self::ser::to_slice;
 #[cfg(feature = "heapless")]

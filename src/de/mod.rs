@@ -23,6 +23,12 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
 pub enum Error {
+    /// Can’t parse a value without knowing its expected type.
+    AnyIsUnsupported,
+
+    /// Cannot parse a sequence of bytes.
+    BytesIsUnsupported,
+
     /// EOF while parsing a list.
     EofWhileParsingList,
 
@@ -62,6 +68,12 @@ pub enum Error {
     /// Invalid unicode code point.
     InvalidUnicodeCodePoint,
 
+    /// Invalid String Escape Sequence
+    InvalidEscapeSequence,
+
+    /// Escaped String length exceeds buffer size
+    EscapedStringIsTooLong,
+
     /// Object key is not a string.
     KeyMustBeAString,
 
@@ -83,16 +95,33 @@ pub enum Error {
 
 impl serde::de::StdError for Error {}
 
-/// A structure that deserializes Rust values from JSON in a buffer.
-pub struct Deserializer<'b> {
-    slice: &'b [u8],
-    index: usize,
+impl From<crate::str::StringUnescapeError> for Error {
+    fn from(error: crate::str::StringUnescapeError) -> Self {
+        match error {
+            crate::str::StringUnescapeError::InvalidEscapeSequence => Self::InvalidEscapeSequence,
+        }
+    }
 }
 
-impl<'a> Deserializer<'a> {
-    /// Create a new `Deserializer`
-    pub fn new(slice: &'a [u8]) -> Deserializer<'_> {
-        Deserializer { slice, index: 0 }
+/// A structure that deserializes Rust values from JSON in a buffer.
+pub struct Deserializer<'b, 's> {
+    slice: &'b [u8],
+    index: usize,
+    string_unescape_buffer: Option<&'s mut [u8]>,
+}
+
+impl<'a, 's> Deserializer<'a, 's> {
+    /// Create a new `Deserializer`, optionally with a buffer to use to unescape strings.
+    /// If not present, strings are not unescaped.
+    pub fn new(
+        slice: &'a [u8],
+        string_unescape_buffer: Option<&'s mut [u8]>,
+    ) -> Deserializer<'a, 's> {
+        Deserializer {
+            slice,
+            index: 0,
+            string_unescape_buffer,
+        }
     }
 
     fn eat_char(&mut self) {
@@ -172,7 +201,14 @@ impl<'a> Deserializer<'a> {
         }
     }
 
+    /// Parse a string, returning the escaped string.
     fn parse_str(&mut self) -> Result<&'a str> {
+        if self.parse_whitespace().ok_or(Error::EofWhileParsingValue)? == b'"' {
+            self.eat_char();
+        } else {
+            return Err(Error::InvalidType);
+        }
+
         let start = self.index;
         loop {
             match self.peek() {
@@ -205,6 +241,7 @@ impl<'a> Deserializer<'a> {
                     } else {
                         let end = self.index;
                         self.eat_char();
+
                         return str::from_utf8(&self.slice[start..end])
                             .map_err(|_| Error::InvalidUnicodeCodePoint);
                     }
@@ -344,7 +381,7 @@ macro_rules! deserialize_fromstr {
     }};
 }
 
-impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
+impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     type Error = Error;
 
     /// Unsupported. Can’t parse a value without knowing its expected type.
@@ -352,7 +389,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        Err(Error::AnyIsUnsupported)
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
@@ -446,34 +483,61 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         deserialize_fromstr!(self, visitor, f64, visit_f64, b"0123456789+-.eE")
     }
 
-    fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_str(visitor)
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        let peek = self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+        let escaped_string = self.parse_str()?;
 
-        match peek {
-            b'"' => {
-                self.eat_char();
-                visitor.visit_borrowed_str(self.parse_str()?)
-            }
-            _ => Err(Error::InvalidType),
+        // If the unescape buffer is not provided, skip unescaping strings
+        let Some(string_unescape_buffer) = self.string_unescape_buffer.as_deref_mut() else {
+            return visitor.visit_borrowed_str(escaped_string);
+        };
+
+        // If the escaped string doesn't contain '\\', it' can't have any escaped characters
+        if !escaped_string.as_bytes().contains(&b'\\') {
+            return visitor.visit_borrowed_str(escaped_string);
         }
+
+        let mut string_unescape_buffer_write_position = 0;
+
+        for fragment in crate::str::EscapedStr(escaped_string).fragments() {
+            let char_encode_buffer = &mut [0; 4];
+
+            let unescaped_bytes = match fragment? {
+                crate::str::EscapedStringFragment::NotEscaped(fragment) => fragment.as_bytes(),
+                crate::str::EscapedStringFragment::Escaped(c) => {
+                    c.encode_utf8(char_encode_buffer).as_bytes()
+                }
+            };
+
+            string_unescape_buffer[string_unescape_buffer_write_position..]
+                .get_mut(..unescaped_bytes.len())
+                .ok_or(Error::EscapedStringIsTooLong)?
+                .copy_from_slice(unescaped_bytes);
+
+            string_unescape_buffer_write_position += unescaped_bytes.len();
+        }
+
+        visitor.visit_str(
+            str::from_utf8(&string_unescape_buffer[..string_unescape_buffer_write_position])
+                .map_err(|_| Error::InvalidUnicodeCodePoint)?,
+        )
     }
 
     /// Unsupported. String is not available in no-std.
-    fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_str(visitor)
     }
 
     /// Unsupported
@@ -481,7 +545,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        Err(Error::BytesIsUnsupported)
     }
 
     /// Unsupported
@@ -489,7 +553,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        Err(Error::BytesIsUnsupported)
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
@@ -534,12 +598,41 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_unit(visitor)
     }
 
-    /// Unsupported. We can’t parse newtypes because we don’t know the underlying type.
-    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
+    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_newtype_struct(self)
+        // If the newtype struct is an `EscapedStr`...
+        if name == crate::str::EscapedStr::NAME {
+            // ...deserialize as an escaped string instead.
+
+            struct EscapedStringDeserializer<'a, 'de, 's>(&'a mut Deserializer<'de, 's>);
+
+            impl<'a, 'de, 's> serde::Deserializer<'de> for EscapedStringDeserializer<'a, 'de, 's> {
+                type Error = Error;
+
+                fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+                where
+                    V: Visitor<'de>,
+                {
+                    // The only structure which is deserialized at this point is an `EscapedStr`,
+                    // so pass the escaped string to its implementation of visit_borrowed_str.
+                    // This line defacto becomes `Ok(EscapedStr(self.0.parse_str()?))`.
+                    visitor.visit_borrowed_str(self.0.parse_str()?)
+                }
+
+                // `EscapedStr` only deserializes strings, so we might as well forward all methods to `deserialize_any`.
+                serde::forward_to_deserialize_any! {
+                    bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+                    bytes byte_buf option unit unit_struct newtype_struct seq tuple
+                    tuple_struct map struct enum identifier ignored_any
+                }
+            }
+
+            visitor.visit_newtype_struct(EscapedStringDeserializer(self))
+        } else {
+            visitor.visit_newtype_struct(self)
+        }
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
@@ -735,17 +828,47 @@ impl fmt::Display for Error {
     }
 }
 
+fn from_slice_maybe_escaped<'a, T>(
+    v: &'a [u8],
+    string_unescape_buffer: Option<&mut [u8]>,
+) -> Result<(T, usize)>
+where
+    T: de::Deserialize<'a>,
+{
+    let mut de = Deserializer::new(v, string_unescape_buffer);
+    let value = de::Deserialize::deserialize(&mut de)?;
+    let length = de.end()?;
+
+    Ok((value, length))
+}
+
+/// Deserializes an instance of type `T` from bytes of JSON text, using the provided buffer to unescape strings
+/// Returns the value and the number of bytes consumed in the process
+pub fn from_slice_escaped<'a, T>(
+    v: &'a [u8],
+    string_unescape_buffer: &mut [u8],
+) -> Result<(T, usize)>
+where
+    T: de::Deserialize<'a>,
+{
+    from_slice_maybe_escaped(v, Some(string_unescape_buffer))
+}
+
 /// Deserializes an instance of type `T` from bytes of JSON text
 /// Returns the value and the number of bytes consumed in the process
 pub fn from_slice<'a, T>(v: &'a [u8]) -> Result<(T, usize)>
 where
     T: de::Deserialize<'a>,
 {
-    let mut de = Deserializer::new(v);
-    let value = de::Deserialize::deserialize(&mut de)?;
-    let length = de.end()?;
+    from_slice_maybe_escaped(v, None)
+}
 
-    Ok((value, length))
+/// Deserializes an instance of type T from a string of JSON text, using the provided buffer to unescape strings
+pub fn from_str_escaped<'a, T>(s: &'a str, string_unescape_buffer: &mut [u8]) -> Result<(T, usize)>
+where
+    T: de::Deserialize<'a>,
+{
+    from_slice_escaped(s.as_bytes(), string_unescape_buffer)
 }
 
 /// Deserializes an instance of type T from a string of JSON text
@@ -758,7 +881,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use core::str::FromStr;
     use serde_derive::Deserialize;
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -821,48 +943,117 @@ mod tests {
     }
 
     #[test]
+    fn char() {
+        fn from_str_test<'de, T: serde::Deserialize<'de>>(
+            s: &'de str,
+        ) -> super::Result<(T, usize)> {
+            crate::from_str_escaped(s, &mut [0; 8])
+        }
+
+        assert_eq!(from_str_test(r#""n""#), Ok(('n', 3)));
+        assert_eq!(from_str_test(r#""\"""#), Ok(('"', 4)));
+        assert_eq!(from_str_test(r#""\\""#), Ok(('\\', 4)));
+        assert_eq!(from_str_test(r#""/""#), Ok(('/', 3)));
+        assert_eq!(from_str_test(r#""\b""#), Ok(('\x08', 4)));
+        assert_eq!(from_str_test(r#""\f""#), Ok(('\x0C', 4)));
+        assert_eq!(from_str_test(r#""\n""#), Ok(('\n', 4)));
+        assert_eq!(from_str_test(r#""\r""#), Ok(('\r', 4)));
+        assert_eq!(from_str_test(r#""\t""#), Ok(('\t', 4)));
+        assert_eq!(from_str_test(r#""\u000b""#), Ok(('\x0B', 8)));
+        assert_eq!(from_str_test(r#""\u000B""#), Ok(('\x0B', 8)));
+        assert_eq!(from_str_test(r#""Σ""#), Ok(('Σ', 4)));
+    }
+
+    #[test]
     fn str() {
+        // No escaping, so can borrow from the input
         assert_eq!(crate::from_str(r#" "hello" "#), Ok(("hello", 9)));
         assert_eq!(crate::from_str(r#" "" "#), Ok(("", 4)));
         assert_eq!(crate::from_str(r#" " " "#), Ok((" ", 5)));
         assert_eq!(crate::from_str(r#" "👏" "#), Ok(("👏", 8)));
 
-        // no unescaping is done (as documented as a known issue in lib.rs)
-        assert_eq!(crate::from_str(r#" "hel\tlo" "#), Ok(("hel\\tlo", 11)));
-        assert_eq!(crate::from_str(r#" "hello \\" "#), Ok(("hello \\\\", 12)));
+        fn s(s: &'static str) -> heapless::String<1024> {
+            s.parse().expect("Failed to create test string")
+        }
+
+        fn from_str_test<'de, T: serde::Deserialize<'de>>(
+            s: &'de str,
+        ) -> super::Result<(T, usize)> {
+            crate::from_str_escaped(s, &mut [0; 16])
+        }
 
         // escaped " in the string content
-        assert_eq!(crate::from_str(r#" "foo\"bar" "#), Ok((r#"foo\"bar"#, 12)));
+        assert_eq!(from_str_test(r#" "foo\"bar" "#), Ok((s(r#"foo"bar"#), 12)));
         assert_eq!(
-            crate::from_str(r#" "foo\\\"bar" "#),
-            Ok((r#"foo\\\"bar"#, 14))
+            from_str_test(r#" "foo\\\"bar" "#),
+            Ok((s(r#"foo\"bar"#), 14))
         );
         assert_eq!(
-            crate::from_str(r#" "foo\"\"bar" "#),
-            Ok((r#"foo\"\"bar"#, 14))
+            from_str_test(r#" "foo\"\"bar" "#),
+            Ok((s(r#"foo""bar"#), 14))
         );
-        assert_eq!(crate::from_str(r#" "\"bar" "#), Ok((r#"\"bar"#, 9)));
-        assert_eq!(crate::from_str(r#" "foo\"" "#), Ok((r#"foo\""#, 9)));
-        assert_eq!(crate::from_str(r#" "\"" "#), Ok((r#"\""#, 6)));
+        assert_eq!(from_str_test(r#" "\"bar" "#), Ok((s(r#""bar"#), 9)));
+        assert_eq!(from_str_test(r#" "foo\"" "#), Ok((s(r#"foo""#), 9)));
+        assert_eq!(from_str_test(r#" "\"" "#), Ok((s(r#"""#), 6)));
 
         // non-excaped " preceded by backslashes
         assert_eq!(
-            crate::from_str(r#" "foo bar\\" "#),
-            Ok((r#"foo bar\\"#, 13))
+            from_str_test(r#" "foo bar\\" "#),
+            Ok((s(r#"foo bar\"#), 13))
         );
         assert_eq!(
-            crate::from_str(r#" "foo bar\\\\" "#),
-            Ok((r#"foo bar\\\\"#, 15))
+            from_str_test(r#" "foo bar\\\\" "#),
+            Ok((s(r#"foo bar\\"#), 15))
         );
         assert_eq!(
-            crate::from_str(r#" "foo bar\\\\\\" "#),
-            Ok((r#"foo bar\\\\\\"#, 17))
+            from_str_test(r#" "foo bar\\\\\\" "#),
+            Ok((s(r#"foo bar\\\"#), 17))
         );
         assert_eq!(
-            crate::from_str(r#" "foo bar\\\\\\\\" "#),
-            Ok((r#"foo bar\\\\\\\\"#, 19))
+            from_str_test(r#" "foo bar\\\\\\\\" "#),
+            Ok((s(r#"foo bar\\\\"#), 19))
         );
-        assert_eq!(crate::from_str(r#" "\\" "#), Ok((r#"\\"#, 6)));
+        assert_eq!(from_str_test(r#" "\\" "#), Ok((s(r#"\"#), 6)));
+    }
+
+    #[test]
+    fn tuple_of_str() {
+        fn s(s: &'static str) -> heapless::String<1024> {
+            s.parse().expect("Failed to create test string")
+        }
+
+        fn from_str_test<'de, T: serde::Deserialize<'de>>(
+            s: &'de str,
+        ) -> super::Result<(T, usize)> {
+            crate::from_str_escaped(s, &mut [0; 16])
+        }
+
+        // The combined length of the first and third strings are longer than the buffer, but that's OK,
+        // as escaped strings are deserialized into owned str types, e.g. `heapless::String`.
+        // The second string is longer than the buffer, but that's OK, as strings which aren't escaped
+        // are deserialized as str's borrowed from the input
+
+        assert_eq!(
+            from_str_test(
+                r#" [ "AAAAAAAAAAAA\n", "BBBBBBBBBBBBBBBBBBBBBBBB", "CCCCCCCCCCCC\n" ] "#
+            ),
+            Ok((
+                (
+                    s("AAAAAAAAAAAA\n"),
+                    "BBBBBBBBBBBBBBBBBBBBBBBB",
+                    s("CCCCCCCCCCCC\n")
+                ),
+                68
+            ))
+        );
+    }
+
+    #[test]
+    fn escaped_str() {
+        assert_eq!(
+            crate::from_str(r#""Hello\nWorld""#),
+            Ok((crate::str::EscapedStr(r#"Hello\nWorld"#), 14))
+        );
     }
 
     #[test]
@@ -1085,10 +1276,9 @@ mod tests {
         assert_eq!(
             crate::from_str::<Xy>(r#"[10]"#),
             Err(crate::de::Error::CustomErrorWithMessage(
-                heapless::String::from_str(
-                    "invalid length 1, expected tuple struct Xy with 2 elements"
-                )
-                .unwrap()
+                "invalid length 1, expected tuple struct Xy with 2 elements"
+                    .parse()
+                    .unwrap()
             ))
         );
         assert_eq!(
@@ -1195,9 +1385,7 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("something bad happened"),
-            crate::de::Error::CustomErrorWithMessage(
-                heapless::String::from_str("something bad happened").unwrap()
-            )
+            crate::de::Error::CustomErrorWithMessage("something bad happened".parse().unwrap())
         );
     }
 
@@ -1207,8 +1395,8 @@ mod tests {
         use serde::de::Error;
         assert_eq!(
             crate::de::Error::custom("0123456789012345678901234567890123456789012345678901234567890123 <- after here the message should be truncated"),
-            crate::de::Error::CustomErrorWithMessage(heapless::String::from_str(
-                "0123456789012345678901234567890123456789012345678901234567890123").unwrap()
+            crate::de::Error::CustomErrorWithMessage(
+                "0123456789012345678901234567890123456789012345678901234567890123".parse().unwrap()
             )
         );
     }
