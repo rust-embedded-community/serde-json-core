@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.6.0] - 2024-08-07
+
 ### Breaking
 - MSRV is now `1.65.0`.
 
@@ -16,7 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 error types when using tools like `probe-rs` for logging over debuggers.
 - Implement `Serializer::collect_str`
 - Derive `Serialize` for `de::Error` and `ser::Error`
-- Support for deserializing escaped strings.
+- Support for deserializing escaped strings using `from_str_escaped` and `from_slice_escaped`.
 
 ### Changed
 
@@ -91,7 +93,8 @@ error types when using tools like `probe-rs` for logging over debuggers.
 
 Initial release
 
-[Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.1...v0.6.0
 [v0.5.1]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.3.0...v0.4.0
