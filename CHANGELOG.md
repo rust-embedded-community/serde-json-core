@@ -94,7 +94,7 @@ error types when using tools like `probe-rs` for logging over debuggers.
 Initial release
 
 [Unreleased]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.6.0...HEAD
-[v0.5.1]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.1...v0.6.0
+[v0.6.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.1...v0.6.0
 [v0.5.1]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/rust-embedded-community/serde-json-core/compare/v0.3.0...v0.4.0
