@@ -5,6 +5,27 @@
 //! This version of [`serde-json`] is aimed at applications that run on resource constrained
 //! devices.
 //!
+//! ## Example
+//! ```
+//! # use serde::{Serialize, Deserialize};
+//! #[derive(Serialize, Deserialize)]
+//! struct Data<'a> {
+//!     value: u32,
+//!     message: &'a str,
+//! }
+//!
+//! // Serialized JSON data can be easily deserialized into Rust types.
+//! let message = b"{\"value\":10,\"message\":\"Hello, World!\"}";
+//! let (data, _remainder) = serde_json_core::from_slice::<Data<'_>>(message).unwrap();
+//! assert_eq!(data.value, 10);
+//! assert_eq!(data.message, "Hello, World!");
+//!
+//! // Structures can also be serialized into slices or strings.
+//! let mut deserialized = [0u8; 256];
+//! let len = serde_json_core::to_slice(&data, &mut deserialized[..]).unwrap();
+//! assert_eq!(&deserialized[..len], message);
+//! ```
+//!
 //! # Current features
 //!
 //! - The error type is a simple C like enum (less overhead, smaller memory footprint)
@@ -16,7 +37,7 @@
 //!   - `bool`
 //!   - Integers
 //!   - Floats
-//!   - `str` (This is a zero copy operation.) (\*)
+//!   - `str` (This is a zero copy operation when deserializing without de-escaping strings.)
 //!   - `Option`
 //!   - Arrays
 //!   - Tuples
@@ -32,9 +53,6 @@
 //!   - Tuples
 //!   - Structs
 //!   - C like enums
-//!
-//! (\*) Deserialization of strings ignores escaped sequences. Escaped sequences might be supported
-//! in the future using a different Serializer as this operation is not zero copy.
 //!
 //! (\*\*) Serialization of strings doesn't escape stuff. This simply has not been implemented yet.
 //!
