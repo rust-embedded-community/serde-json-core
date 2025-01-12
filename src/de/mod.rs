@@ -1,5 +1,6 @@
 //! Deserialize JSON data to a Rust data structure
 
+use core::marker::PhantomData;
 use core::str::FromStr;
 use core::{fmt, str};
 
@@ -384,12 +385,71 @@ macro_rules! deserialize_fromstr {
 impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
     type Error = Error;
 
-    /// Unsupported. Can’t parse a value without knowing its expected type.
-    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        Err(Error::AnyIsUnsupported)
+        enum ParsedNumber {
+            U64(u64),
+            I64(i64),
+            F64(f64),
+            NAN,
+        }
+
+        impl ParsedNumber {
+            pub fn from_str(x: &str) -> Result<Self> {
+                if let Ok(x) = i64::from_str(x) {
+                    return Ok(ParsedNumber::I64(x as i64));
+                }
+
+                if let Ok(x) = u64::from_str(x) {
+                    return Ok(ParsedNumber::U64(x as u64));
+                }
+
+                if let Ok(x) = f64::from_str(x) {
+                    return Ok(ParsedNumber::F64(x as f64));
+                }
+
+                Err(Error::InvalidNumber)
+            }
+        }
+
+        struct VisitorAdaptor<'de, V>(V, PhantomData<&'de ()>);
+
+        impl<'de, V: Visitor<'de>> VisitorAdaptor<'de, V> {
+            fn visit_number<E>(self, v: ParsedNumber) -> core::result::Result<V::Value, E>
+            where
+                E: de::Error,
+            {
+                match v {
+                    ParsedNumber::U64(x) => self.0.visit_u64(x),
+                    ParsedNumber::I64(x) => self.0.visit_i64(x),
+                    ParsedNumber::F64(x) => self.0.visit_f64(x),
+                    ParsedNumber::NAN => self.0.visit_f64(f64::NAN),
+                }
+            }
+        }
+
+        let peek = self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+
+        match peek {
+            b'n' => self.deserialize_unit(visitor),
+            b't' | b'f' => self.deserialize_bool(visitor),
+            b'-' | b'0'..=b'9' => {
+                let visitor = VisitorAdaptor(visitor, PhantomData);
+                deserialize_fromstr!(
+                    self,
+                    visitor,
+                    ParsedNumber,
+                    visit_number,
+                    b"0123456789+-.eE"
+                )
+            }
+            b'"' => self.deserialize_str(visitor),
+            b'[' => self.deserialize_seq(visitor),
+            b'{' => self.deserialize_map(visitor),
+            _ => Err(Error::ExpectedSomeValue),
+        }
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
@@ -1485,5 +1545,73 @@ mod tests {
                 852
             ))
         )
+    }
+
+    #[test]
+    fn deserialize_any() {
+        #[derive(PartialEq, Debug)]
+        enum Any {
+            U64(u64),
+            I64(i64),
+            F64(f64),
+            Bool(bool),
+        }
+
+        struct Visitor;
+
+        impl<'de> super::de::Visitor<'de> for Visitor {
+            type Value = Any;
+
+            fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(formatter, "an Any")
+            }
+
+            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Any::Bool(v))
+            }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Any::I64(v))
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Any::U64(v))
+            }
+
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Any::F64(v))
+            }
+        }
+
+        impl<'de> super::de::Deserialize<'de> for Any {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                deserializer.deserialize_any(Visitor)
+            }
+        }
+
+        let from_str = |x| crate::from_str::<Any>(x).ok().map(|x| x.0);
+
+        assert_eq!(from_str("true"), Some(Any::Bool(true)));
+        assert_eq!(from_str("false"), Some(Any::Bool(false)));
+        assert_eq!(from_str("123"), Some(Any::I64(123)));
+        assert_eq!(from_str("-123"), Some(Any::I64(-123)));
+        assert_eq!(from_str("18446744073709551615"), Some(Any::U64(u64::MAX)));
+        assert_eq!(from_str("123.0"), Some(Any::F64(123.0)));
+        assert_eq!(from_str("3.7e-5"), Some(Any::F64(3.7e-5)));
     }
 }
