@@ -13,7 +13,7 @@ impl<'a, 'b, 's> MapAccess<'a, 'b, 's> {
     }
 }
 
-impl<'a, 'de, 's> de::MapAccess<'de> for MapAccess<'a, 'de, 's> {
+impl<'de> de::MapAccess<'de> for MapAccess<'_, 'de, '_> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Error>
@@ -61,7 +61,7 @@ struct MapKey<'a, 'b, 's> {
     de: &'a mut Deserializer<'b, 's>,
 }
 
-impl<'de, 'a, 's> de::Deserializer<'de> for MapKey<'a, 'de, 's> {
+impl<'de> de::Deserializer<'de> for MapKey<'_, 'de, '_> {
     type Error = Error;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Error>

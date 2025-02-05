@@ -16,7 +16,7 @@
 //!
 //! // Serialized JSON data can be easily deserialized into Rust types.
 //! let message = b"{\"value\":10,\"message\":\"Hello, World!\"}";
-//! let (data, _remainder) = serde_json_core::from_slice::<Data<'_>>(message).unwrap();
+//! let (data, _consumed) = serde_json_core::from_slice::<Data<'_>>(message).unwrap();
 //! assert_eq!(data.value, 10);
 //! assert_eq!(data.message, "Hello, World!");
 //!

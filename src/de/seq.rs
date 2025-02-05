@@ -13,7 +13,7 @@ impl<'a, 'b, 's> SeqAccess<'a, 'b, 's> {
     }
 }
 
-impl<'a, 'de, 's> de::SeqAccess<'de> for SeqAccess<'a, 'de, 's> {
+impl<'de> de::SeqAccess<'de> for SeqAccess<'_, 'de, '_> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>

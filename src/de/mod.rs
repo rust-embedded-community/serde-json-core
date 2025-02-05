@@ -381,7 +381,7 @@ macro_rules! deserialize_fromstr {
     }};
 }
 
-impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
+impl<'de> de::Deserializer<'de> for &mut Deserializer<'de, '_> {
     type Error = Error;
 
     /// Unsupported. Can’t parse a value without knowing its expected type.
@@ -608,7 +608,7 @@ impl<'a, 'de, 's> de::Deserializer<'de> for &'a mut Deserializer<'de, 's> {
 
             struct EscapedStringDeserializer<'a, 'de, 's>(&'a mut Deserializer<'de, 's>);
 
-            impl<'a, 'de, 's> serde::Deserializer<'de> for EscapedStringDeserializer<'a, 'de, 's> {
+            impl<'de> serde::Deserializer<'de> for EscapedStringDeserializer<'_, 'de, '_> {
                 type Error = Error;
 
                 fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
