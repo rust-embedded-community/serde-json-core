@@ -13,7 +13,7 @@ impl<'a, 'b, 's> MapAccess<'a, 'b, 's> {
     }
 }
 
-impl<'a, 'de, 's> de::MapAccess<'de> for MapAccess<'a, 'de, 's> {
+impl<'de> de::MapAccess<'de> for MapAccess<'_, 'de, '_> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Error>

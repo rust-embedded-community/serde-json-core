@@ -651,7 +651,7 @@ impl<'a, 'b> StringCollector<'a, 'b> {
     }
 }
 
-impl<'a, 'b> fmt::Write for StringCollector<'a, 'b> {
+impl fmt::Write for StringCollector<'_, '_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.do_write_str(s).or(Err(fmt::Error))
     }
