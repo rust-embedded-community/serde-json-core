@@ -25,7 +25,7 @@ impl<'de> de::EnumAccess<'de> for UnitVariantAccess<'_, 'de, '_> {
     }
 }
 
-impl<'de, 'a, 's> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de, 's> {
+impl<'de> de::VariantAccess<'de> for UnitVariantAccess<'_, 'de, '_> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
@@ -78,7 +78,7 @@ impl<'de> de::EnumAccess<'de> for VariantAccess<'_, 'de, '_> {
     }
 }
 
-impl<'de, 'a, 's> de::VariantAccess<'de> for VariantAccess<'a, 'de, 's> {
+impl<'de> de::VariantAccess<'de> for VariantAccess<'_, 'de, '_> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
