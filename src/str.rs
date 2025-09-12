@@ -2,8 +2,9 @@
 
 use core::fmt;
 
-#[derive(Debug)]
 /// A fragment of an escaped string
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum EscapedStringFragment<'a> {
     /// A series of characters which weren't escaped in the input.
     NotEscaped(&'a str),
@@ -11,8 +12,9 @@ pub enum EscapedStringFragment<'a> {
     Escaped(char),
 }
 
-#[derive(Debug)]
 /// Errors occuring while unescaping strings.
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum StringUnescapeError {
     /// Failed to unescape a character due to an invalid escape sequence.
     InvalidEscapeSequence,
@@ -23,7 +25,7 @@ impl fmt::Display for StringUnescapeError {
         match self {
             StringUnescapeError::InvalidEscapeSequence => write!(
                 f,
-                "Failed to unescape a character due to an invalid escape sequence."
+                "Failed to unescape a character due to an invalid escape sequence"
             ),
         }
     }
@@ -88,7 +90,7 @@ fn unescape_next_fragment(
 ///         #[serde(borrow)]
 ///         description: serde_json_core::str::EscapedStr<'a>,
 ///     }
-///     
+///
 ///     serde_json_core::de::from_str_escaped::<Event<'_>>(
 ///         r#"{ "name": "Party\u0021", "description": "I'm throwing a party! Hopefully the \u2600 shines!" }"#,
 ///         &mut [0; 8],
@@ -97,6 +99,7 @@ fn unescape_next_fragment(
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename = "__serde_json_core_escaped_string__")]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct EscapedStr<'a>(pub &'a str);
 
 impl<'a> EscapedStr<'a> {
