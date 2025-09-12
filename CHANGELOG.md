@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 - Implement `defmt::Format` for `EscapedStr`, `EscapedStringFragment` and `StringUnescapeError`.
+- Implement `Default` for `EscapedStr` (returning an empty string).
 
 ### Changed
 - Updated `heapless` to version 0.9.2.
