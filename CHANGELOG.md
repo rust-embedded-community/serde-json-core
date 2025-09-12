@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Implement `defmt::Format` for `EscapedStr`, `EscapedStringFragment` and `StringUnescapeError`.
+
 ## [v0.6.0] - 2024-08-07
 
 ### Breaking
