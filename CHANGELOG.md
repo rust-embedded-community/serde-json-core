@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Breaking
+- MSRV is now `1.70.0`.
+
 ## [v0.6.0] - 2024-08-07
 
 ### Breaking
