@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Breaking
 - MSRV is now `1.87.0`.
 
+### Added
+- Implement `defmt::Format` for `EscapedStr`, `EscapedStringFragment` and `StringUnescapeError`.
+
 ### Changed
 - Updated `heapless` to version 0.9.2.
 - Updated `defmt` to version 1.0.1.
