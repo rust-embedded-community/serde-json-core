@@ -97,7 +97,7 @@ fn unescape_next_fragment(
 ///     )
 ///     .unwrap();
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename = "__serde_json_core_escaped_string__")]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct EscapedStr<'a>(pub &'a str);
