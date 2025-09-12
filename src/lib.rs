@@ -47,14 +47,12 @@
 //!   - `bool`
 //!   - Integers
 //!   - Floats
-//!   - `str` (\*\*)
+//!   - `str`
 //!   - `Option`
 //!   - Arrays
 //!   - Tuples
 //!   - Structs
 //!   - C like enums
-//!
-//! (\*\*) Serialization of strings doesn't escape stuff. This simply has not been implemented yet.
 //!
 //! # Planned features
 //!
