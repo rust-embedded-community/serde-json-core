@@ -4,7 +4,7 @@ authors = ["Jorge Aparicio <jorge@japaric.io>",
            "Robert Jördens <rj@quartiq.de>",
            "Mathias Koch <mk@factbird.com>"
 ]
-categories = ["no-std"]
+categories = ["parsing", "no-std", "no-std::no-alloc", "embedded", "web-programming"]
 description = "serde-json for no_std programs"
 documentation = "https://docs.rs/serde-json-core"
 edition = "2018"
