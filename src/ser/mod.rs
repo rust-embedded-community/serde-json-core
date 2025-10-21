@@ -42,6 +42,13 @@ impl From<u8> for Error {
     }
 }
 
+#[cfg(feature = "heapless")]
+impl From<heapless::CapacityError> for Error {
+    fn from(_: heapless::CapacityError) -> Self {
+        Error::BufferFull
+    }
+}
+
 impl serde::ser::StdError for Error {}
 
 impl fmt::Display for Error {
