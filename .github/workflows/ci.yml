@@ -22,7 +22,7 @@ jobs:
 
         include:
           # Test MSRV
-          - rust: 1.86.0  # keep in sync with manifest rust-version
+          - rust: 1.87.0  # keep in sync with manifest rust-version
             TARGET: x86_64-unknown-linux-gnu
 
           # Test nightly but don't fail
