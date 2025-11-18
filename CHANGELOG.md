@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Breaking
 - MSRV is now `1.87.0`.
 
+### Changed
+- Updated `heapless` to version 0.9.2.
+- Updated `defmt` to version 1.0.1.
+
 ## [v0.6.0] - 2024-08-07
 
 ### Breaking
