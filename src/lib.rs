@@ -87,6 +87,9 @@ pub use self::de::{from_slice, from_slice_escaped, from_str, from_str_escaped};
 pub use self::ser::to_slice;
 #[cfg(feature = "heapless")]
 pub use self::ser::{to_string, to_vec};
+#[doc(inline)]
+#[cfg(feature = "embedded-io")]
+pub use self::ser::to_writer;
 
 #[cfg(feature = "heapless")]
 pub use heapless;
