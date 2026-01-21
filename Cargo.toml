@@ -33,11 +33,17 @@ version = "1.0.100"
 version = "1.0.1"
 optional = true
 
+[dependencies.embedded-io]
+default-features = false
+version = "0.6"
+optional = true
+
 [dev-dependencies]
 serde_derive = "1.0.100"
 
 [features]
 default = ["heapless"]
+embedded-io = ["dep:embedded-io"]
 custom-error-messages = ["heapless"]
 std = ["serde/std"]
 defmt = ["dep:defmt", "heapless?/defmt"]

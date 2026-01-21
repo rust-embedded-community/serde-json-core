@@ -12,11 +12,16 @@ use heapless::{String, Vec};
 
 use self::map::SerializeMap;
 use self::seq::SerializeSeq;
+use self::ser_backend::{SerializerBackend, SliceSerializer};
 use self::struct_::{SerializeStruct, SerializeStructVariant};
 
 mod map;
 mod seq;
 mod struct_;
+mod ser_backend;
+
+#[cfg(feature = "embedded-io")]
+mod write_backend;
 
 /// Serialization result
 pub type Result<T> = ::core::result::Result<T, Error>;
@@ -28,6 +33,9 @@ pub type Result<T> = ::core::result::Result<T, Error>;
 pub enum Error {
     /// Buffer is full
     BufferFull,
+    /// Some IO error occurred
+    #[cfg(feature = "embedded-io")]
+    IOError
 }
 
 impl From<()> for Error {
@@ -57,50 +65,31 @@ impl fmt::Display for Error {
     }
 }
 
+
 /// A structure that serializes Rust values as JSON into a buffer.
 pub struct Serializer<'a> {
-    buf: &'a mut [u8],
-    current_length: usize,
+    backend: &'a mut dyn SerializerBackend
 }
 
 impl<'a> Serializer<'a> {
     /// Create a new `Serializer`
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        Serializer {
-            buf,
-            current_length: 0,
+    pub fn new(backend: &'a mut dyn SerializerBackend) -> Self {
+        Self {
+            backend
         }
     }
 
     /// Return the current amount of serialized data in the buffer
     pub fn end(&self) -> usize {
-        self.current_length
+        self.backend.end()
     }
 
     fn push(&mut self, c: u8) -> Result<()> {
-        if self.current_length < self.buf.len() {
-            unsafe { self.push_unchecked(c) };
-            Ok(())
-        } else {
-            Err(Error::BufferFull)
-        }
-    }
-
-    unsafe fn push_unchecked(&mut self, c: u8) {
-        self.buf[self.current_length] = c;
-        self.current_length += 1;
+        self.backend.push(c)
     }
 
     fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
-        if self.current_length + other.len() > self.buf.len() {
-            // won't fit in the buf; don't modify anything and return an error
-            Err(Error::BufferFull)
-        } else {
-            for c in other {
-                unsafe { self.push_unchecked(*c) };
-            }
-            Ok(())
-        }
+        self.backend.extend_from_slice(other)
     }
 
     fn push_char(&mut self, c: char) -> Result<()> {
@@ -691,9 +680,23 @@ pub fn to_slice<T>(value: &T, buf: &mut [u8]) -> Result<usize>
 where
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new(buf);
+    let mut backend = SliceSerializer::new(buf);
+    let mut ser = Serializer::new(&mut backend);
     value.serialize(&mut ser)?;
-    Ok(ser.current_length)
+    Ok(backend.current_length)
+}
+
+/// Serializes the given data structure as a JSON byte vector into the provided writer
+#[cfg(feature = "embedded-io")]
+pub fn to_writer<T, W>(value: &T, writer: &mut W) -> Result<()>
+where
+    T: ser::Serialize + ?Sized,
+    W: embedded_io::Write
+{
+    let mut backend = write_backend::WriteSerializer::new(writer);
+    let mut ser = Serializer::new(&mut backend);
+    value.serialize(&mut ser)?;
+    Ok(())
 }
 
 impl ser::Error for Error {
@@ -1077,5 +1080,30 @@ mod tests {
 
         let sd3 = SimpleDecimal(22_222.777);
         assert_eq!(&*crate::to_string::<_, N>(&sd3).unwrap(), r#"22222.78"#);
+    }
+
+    #[cfg(feature = "embedded-io")]
+    mod my_writer;
+
+    #[cfg(feature = "embedded-io")]
+    #[test]
+    fn to_writer() {
+        #[derive(Serialize)]
+        struct Dog<'a> {
+            name: &'a str,
+            age: u8
+        }
+
+        let dog = Dog { name: "Punto", age: 10 };
+        let json1 = crate::to_string::<_, 128>(&dog).unwrap();
+
+        let mut my_writer = my_writer::MyWriter { buffer: [0; 128], pos: 0, fail: false };
+        crate::to_writer(&dog, &mut my_writer).unwrap();
+        let json2 = &my_writer.buffer[..my_writer.pos];
+
+        assert_eq!(
+            json1.as_bytes(),
+            json2
+        );
     }
 }
