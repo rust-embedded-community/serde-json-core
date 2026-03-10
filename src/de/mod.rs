@@ -124,6 +124,11 @@ impl<'a, 's> Deserializer<'a, 's> {
         }
     }
 
+    /// Returns the amount of data consumed so far.
+    pub fn bytes_consumed(&self) -> usize {
+        self.index
+    }
+
     fn eat_char(&mut self) {
         self.index += 1;
     }
@@ -133,7 +138,7 @@ impl<'a, 's> Deserializer<'a, 's> {
     pub fn end(&mut self) -> Result<usize> {
         match self.parse_whitespace() {
             Some(_) => Err(Error::TrailingCharacters),
-            None => Ok(self.index),
+            None => Ok(self.bytes_consumed()),
         }
     }
 
@@ -1485,5 +1490,28 @@ mod tests {
                 852
             ))
         )
+    }
+
+    #[test]
+    fn partial_parsing() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Temperature {
+            temperature: i8,
+        }
+
+        use serde::de::Deserialize;
+
+        let mut de = crate::de::Deserializer::new(br#"{"temperature":20}{"temperature":25}"#, None);
+        assert_eq!(
+            Temperature::deserialize(&mut de),
+            Ok(Temperature { temperature: 20 })
+        );
+        assert_eq!(de.bytes_consumed(), 18);
+        assert_eq!(
+            Temperature::deserialize(&mut de),
+            Ok(Temperature { temperature: 25 })
+        );
+        assert_eq!(de.bytes_consumed(), 36);
+        assert_eq!(de.end(), Ok(36));
     }
 }
