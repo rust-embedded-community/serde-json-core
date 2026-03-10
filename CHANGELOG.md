@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - MSRV is now `1.87.0`.
 
 ### Added
+- Added `pub` `Deserializer::bytes_consumed()` to allow easier partial parsing.
 - Implement `defmt::Format` for `EscapedStr`, `EscapedStringFragment` and `StringUnescapeError`.
 - Implement `Default` for `EscapedStr` (returning an empty string).
 
