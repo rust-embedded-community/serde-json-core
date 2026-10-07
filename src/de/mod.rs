@@ -1132,8 +1132,6 @@ mod tests {
             Ok((Temperature { temperature: -3. }, 21))
         );
 
-        use core::f32;
-
         assert_eq!(
             crate::from_str(r#"{ "temperature": -1e500 }"#),
             Ok((
