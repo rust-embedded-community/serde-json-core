@@ -1,7 +1,12 @@
 //! Serialize a Rust data structure into JSON data
 
+use core::fmt::Display;
 use core::mem::MaybeUninit;
 use core::{fmt, str};
+
+#[cfg(feature = "heapless")]
+use embedded_io::SliceWriteError;
+use embedded_io::Write;
 
 use serde::ser;
 use serde::ser::SerializeStruct as _;
@@ -10,100 +15,46 @@ use serde::Serialize;
 #[cfg(feature = "heapless")]
 use heapless::{String, Vec};
 
-use self::map::SerializeMap;
-use self::seq::SerializeSeq;
-use self::struct_::{SerializeStruct, SerializeStructVariant};
-
 mod map;
+use map::SerializeMap;
+
 mod seq;
+use seq::SerializeSeq;
+
 mod struct_;
+use struct_::{SerializeStruct, SerializeStructVariant};
 
-/// Serialization result
-pub type Result<T> = ::core::result::Result<T, Error>;
+mod error;
+pub use error::Error;
 
-/// This type represents all possible errors that can occur when serializing JSON data
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[non_exhaustive]
-pub enum Error {
-    /// Buffer is full
-    BufferFull,
-}
-
-impl From<()> for Error {
-    fn from(_: ()) -> Error {
-        Error::BufferFull
-    }
-}
-
-impl From<u8> for Error {
-    fn from(_: u8) -> Error {
-        Error::BufferFull
-    }
-}
-
-#[cfg(feature = "heapless")]
-impl From<heapless::CapacityError> for Error {
-    fn from(_: heapless::CapacityError) -> Self {
-        Error::BufferFull
-    }
-}
-
-impl serde::ser::StdError for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Buffer is full")
-    }
-}
+mod unreachable;
+use unreachable::Unreachable;
 
 /// A structure that serializes Rust values as JSON into a buffer.
-pub struct Serializer<'a> {
-    buf: &'a mut [u8],
-    current_length: usize,
+pub struct Serializer<W> {
+    writer: W,
 }
 
-impl<'a> Serializer<'a> {
+impl<W: Write> Serializer<W> {
     /// Create a new `Serializer`
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        Serializer {
-            buf,
-            current_length: 0,
-        }
+    pub fn new(writer: W) -> Self {
+        Self { writer }
     }
 
-    /// Return the current amount of serialized data in the buffer
-    pub fn end(&self) -> usize {
-        self.current_length
+    /// Consume the `Serializer` and return the underlying writer
+    pub fn into_inner(self) -> W {
+        self.writer
     }
 
-    fn push(&mut self, c: u8) -> Result<()> {
-        if self.current_length < self.buf.len() {
-            unsafe { self.push_unchecked(c) };
-            Ok(())
-        } else {
-            Err(Error::BufferFull)
-        }
+    fn push(&mut self, c: u8) -> Result<(), Error<W::Error>> {
+        Ok(self.writer.write_all(&[c])?)
     }
 
-    unsafe fn push_unchecked(&mut self, c: u8) {
-        self.buf[self.current_length] = c;
-        self.current_length += 1;
+    fn extend_from_slice(&mut self, other: &[u8]) -> Result<(), Error<W::Error>> {
+        Ok(self.writer.write_all(other)?)
     }
 
-    fn extend_from_slice(&mut self, other: &[u8]) -> Result<()> {
-        if self.current_length + other.len() > self.buf.len() {
-            // won't fit in the buf; don't modify anything and return an error
-            Err(Error::BufferFull)
-        } else {
-            for c in other {
-                unsafe { self.push_unchecked(*c) };
-            }
-            Ok(())
-        }
-    }
-
-    fn push_char(&mut self, c: char) -> Result<()> {
+    fn push_char(&mut self, c: char) -> Result<(), Error<W::Error>> {
         // Do escaping according to "6. MUST represent all strings (including object member names) in
         // their minimal-length UTF-8 encoding": https://gibson042.github.io/canonicaljson-spec/
         //
@@ -249,18 +200,18 @@ fn hex(c: u8) -> (u8, u8) {
     (hex_4bit(c >> 4), hex_4bit(c & 0x0F))
 }
 
-impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
+impl<'a, W: Write<Error: Display>> ser::Serializer for &'a mut Serializer<W> {
     type Ok = ();
-    type Error = Error;
-    type SerializeSeq = SerializeSeq<'a, 'b>;
-    type SerializeTuple = SerializeSeq<'a, 'b>;
-    type SerializeTupleStruct = SerializeSeq<'a, 'b>;
-    type SerializeTupleVariant = Unreachable;
-    type SerializeMap = SerializeMap<'a, 'b>;
-    type SerializeStruct = SerializeStruct<'a, 'b>;
-    type SerializeStructVariant = SerializeStructVariant<'a, 'b>;
+    type Error = Error<W::Error>;
+    type SerializeSeq = SerializeSeq<'a, W>;
+    type SerializeTuple = SerializeSeq<'a, W>;
+    type SerializeTupleStruct = SerializeSeq<'a, W>;
+    type SerializeTupleVariant = Unreachable<W::Error>;
+    type SerializeMap = SerializeMap<'a, W>;
+    type SerializeStruct = SerializeStruct<'a, W>;
+    type SerializeStructVariant = SerializeStructVariant<'a, W>;
 
-    fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
+    fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         if v {
             self.extend_from_slice(b"true")
         } else {
@@ -268,47 +219,47 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         }
     }
 
-    fn serialize_i8(self, v: i8) -> Result<Self::Ok> {
+    fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
         // "-128"
         serialize_signed!(self, 4, v, i8, u8)
     }
 
-    fn serialize_i16(self, v: i16) -> Result<Self::Ok> {
+    fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
         // "-32768"
         serialize_signed!(self, 6, v, i16, u16)
     }
 
-    fn serialize_i32(self, v: i32) -> Result<Self::Ok> {
+    fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
         // "-2147483648"
         serialize_signed!(self, 11, v, i32, u32)
     }
 
-    fn serialize_i64(self, v: i64) -> Result<Self::Ok> {
+    fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         // "-9223372036854775808"
         serialize_signed!(self, 20, v, i64, u64)
     }
 
-    fn serialize_u8(self, v: u8) -> Result<Self::Ok> {
+    fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         // "255"
         serialize_unsigned!(self, 3, v)
     }
 
-    fn serialize_u16(self, v: u16) -> Result<Self::Ok> {
+    fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
         // "65535"
         serialize_unsigned!(self, 5, v)
     }
 
-    fn serialize_u32(self, v: u32) -> Result<Self::Ok> {
+    fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
         // "4294967295"
         serialize_unsigned!(self, 10, v)
     }
 
-    fn serialize_u64(self, v: u64) -> Result<Self::Ok> {
+    fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         // "18446744073709551615"
         serialize_unsigned!(self, 20, v)
     }
 
-    fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
+    fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
         if v.is_finite() {
             serialize_ryu!(self, v)
         } else {
@@ -316,7 +267,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         }
     }
 
-    fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
+    fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         if v.is_finite() {
             serialize_ryu!(self, v)
         } else {
@@ -324,11 +275,11 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         }
     }
 
-    fn serialize_char(self, _v: char) -> Result<Self::Ok> {
+    fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> {
         unreachable!()
     }
 
-    fn serialize_str(self, v: &str) -> Result<Self::Ok> {
+    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         self.push(b'"')?;
 
         for c in v.chars() {
@@ -338,26 +289,26 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self.push(b'"')
     }
 
-    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.extend_from_slice(v)
     }
 
-    fn serialize_none(self) -> Result<Self::Ok> {
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         self.extend_from_slice(b"null")
     }
 
-    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: ser::Serialize + ?Sized,
     {
         value.serialize(self)
     }
 
-    fn serialize_unit(self) -> Result<Self::Ok> {
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.serialize_none()
     }
 
-    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok> {
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.serialize_unit()
     }
 
@@ -366,11 +317,15 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
-    ) -> Result<Self::Ok> {
+    ) -> Result<Self::Ok, Self::Error> {
         self.serialize_str(variant)
     }
 
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok>
+    fn serialize_newtype_struct<T>(
+        self,
+        name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -378,89 +333,95 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         if name == crate::str::EscapedStr::NAME {
             // serialize it as an already escaped string.
 
-            struct EscapedStringSerializer<'a, 'b>(&'a mut Serializer<'b>);
+            struct EscapedStringSerializer<'a, W>(&'a mut Serializer<W>);
 
-            impl<'a, 'b: 'a> serde::Serializer for EscapedStringSerializer<'a, 'b> {
+            impl<'a, W: Write<Error: Display>> serde::Serializer for EscapedStringSerializer<'a, W> {
                 type Ok = ();
-                type Error = Error;
+                type Error = Error<W::Error>;
 
-                type SerializeSeq = serde::ser::Impossible<(), Error>;
-                type SerializeTuple = serde::ser::Impossible<(), Error>;
-                type SerializeTupleStruct = serde::ser::Impossible<(), Error>;
-                type SerializeTupleVariant = serde::ser::Impossible<(), Error>;
-                type SerializeMap = serde::ser::Impossible<(), Error>;
-                type SerializeStruct = serde::ser::Impossible<(), Error>;
-                type SerializeStructVariant = serde::ser::Impossible<(), Error>;
+                type SerializeSeq = serde::ser::Impossible<(), Self::Error>;
+                type SerializeTuple = serde::ser::Impossible<(), Self::Error>;
+                type SerializeTupleStruct = serde::ser::Impossible<(), Self::Error>;
+                type SerializeTupleVariant = serde::ser::Impossible<(), Self::Error>;
+                type SerializeMap = serde::ser::Impossible<(), Self::Error>;
+                type SerializeStruct = serde::ser::Impossible<(), Self::Error>;
+                type SerializeStructVariant = serde::ser::Impossible<(), Self::Error>;
 
-                fn serialize_bool(self, _v: bool) -> Result<Self::Ok> {
+                fn serialize_bool(self, _v: bool) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_i8(self, _v: i8) -> Result<Self::Ok> {
+                fn serialize_i8(self, _v: i8) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_i16(self, _v: i16) -> Result<Self::Ok> {
+                fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_i32(self, _v: i32) -> Result<Self::Ok> {
+                fn serialize_i32(self, _v: i32) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_i64(self, _v: i64) -> Result<Self::Ok> {
+                fn serialize_i64(self, _v: i64) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_u8(self, _v: u8) -> Result<Self::Ok> {
+                fn serialize_u8(self, _v: u8) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_u16(self, _v: u16) -> Result<Self::Ok> {
+                fn serialize_u16(self, _v: u16) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_u32(self, _v: u32) -> Result<Self::Ok> {
+                fn serialize_u32(self, _v: u32) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_u64(self, _v: u64) -> Result<Self::Ok> {
+                fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_f32(self, _v: f32) -> Result<Self::Ok> {
+                fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_f64(self, _v: f64) -> Result<Self::Ok> {
+                fn serialize_f64(self, _v: f64) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_char(self, _v: char) -> Result<Self::Ok> {
+                fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_str(self, v: &str) -> Result<Self::Ok> {
+                fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
                     v.bytes().try_for_each(|c| self.0.push(c))
                 }
 
-                fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok> {
+                fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_none(self) -> Result<Self::Ok> {
+                fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_some<T: Serialize + ?Sized>(self, _value: &T) -> Result<Self::Ok> {
+                fn serialize_some<T: Serialize + ?Sized>(
+                    self,
+                    _value: &T,
+                ) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_unit(self) -> Result<Self::Ok> {
+                fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok> {
+                fn serialize_unit_struct(
+                    self,
+                    _name: &'static str,
+                ) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
@@ -469,7 +430,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     _name: &'static str,
                     _variant_index: u32,
                     _variant: &'static str,
-                ) -> Result<Self::Ok> {
+                ) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
@@ -477,7 +438,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     self,
                     _name: &'static str,
                     _value: &T,
-                ) -> Result<Self::Ok> {
+                ) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
@@ -487,15 +448,18 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     _variant_index: u32,
                     _variant: &'static str,
                     _value: &T,
-                ) -> Result<Self::Ok> {
+                ) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
+                fn serialize_seq(
+                    self,
+                    _len: Option<usize>,
+                ) -> Result<Self::SerializeSeq, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
+                fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
                     unreachable!()
                 }
 
@@ -503,7 +467,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     self,
                     _name: &'static str,
                     _len: usize,
-                ) -> Result<Self::SerializeTupleStruct> {
+                ) -> Result<Self::SerializeTupleStruct, Self::Error> {
                     unreachable!()
                 }
 
@@ -513,11 +477,14 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     _variant_index: u32,
                     _variant: &'static str,
                     _len: usize,
-                ) -> Result<Self::SerializeTupleVariant> {
+                ) -> Result<Self::SerializeTupleVariant, Self::Error> {
                     unreachable!()
                 }
 
-                fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
+                fn serialize_map(
+                    self,
+                    _len: Option<usize>,
+                ) -> Result<Self::SerializeMap, Self::Error> {
                     unreachable!()
                 }
 
@@ -525,7 +492,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     self,
                     _name: &'static str,
                     _len: usize,
-                ) -> Result<Self::SerializeStruct> {
+                ) -> Result<Self::SerializeStruct, Self::Error> {
                     unreachable!()
                 }
 
@@ -535,11 +502,14 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
                     _variant_index: u32,
                     _variant: &'static str,
                     _len: usize,
-                ) -> Result<Self::SerializeStructVariant> {
+                ) -> Result<Self::SerializeStructVariant, Self::Error> {
                     unreachable!()
                 }
 
-                fn collect_str<T: fmt::Display + ?Sized>(self, _value: &T) -> Result<Self::Ok> {
+                fn collect_str<T: fmt::Display + ?Sized>(
+                    self,
+                    _value: &T,
+                ) -> Result<Self::Ok, Self::Error> {
                     unreachable!()
                 }
             }
@@ -562,7 +532,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         _variant_index: u32,
         variant: &'static str,
         value: &T,
-    ) -> Result<Self::Ok>
+    ) -> Result<Self::Ok, Self::Error>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -573,13 +543,13 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         Ok(())
     }
 
-    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         self.push(b'[')?;
 
         Ok(SerializeSeq::new(self))
     }
 
-    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.serialize_seq(Some(_len))
     }
 
@@ -587,7 +557,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         self,
         _name: &'static str,
         len: usize,
-    ) -> Result<Self::SerializeTupleStruct> {
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         self.serialize_seq(Some(len))
     }
 
@@ -597,17 +567,21 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         _variant_index: u32,
         _variant: &'static str,
         _len: usize,
-    ) -> Result<Self::SerializeTupleVariant> {
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         unreachable!()
     }
 
-    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         self.push(b'{')?;
 
         Ok(SerializeMap::new(self))
     }
 
-    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
         self.push(b'{')?;
 
         Ok(SerializeStruct::new(self))
@@ -619,7 +593,7 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         _variant_index: u32,
         variant: &'static str,
         _len: usize,
-    ) -> Result<Self::SerializeStructVariant> {
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
         self.extend_from_slice(b"{\"")?;
         self.extend_from_slice(variant.as_bytes())?;
         self.extend_from_slice(b"\":{")?;
@@ -627,46 +601,19 @@ impl<'a, 'b: 'a> ser::Serializer for &'a mut Serializer<'b> {
         Ok(SerializeStructVariant::new(self))
     }
 
-    fn collect_str<T>(self, value: &T) -> Result<Self::Ok>
+    fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: fmt::Display + ?Sized,
     {
         self.push(b'"')?;
-
-        let mut col = StringCollector::new(self);
-        fmt::write(&mut col, format_args!("{}", value)).or(Err(Error::BufferFull))?;
-
+        self.writer.write_fmt(format_args!("{}", value))?;
         self.push(b'"')
-    }
-}
-
-struct StringCollector<'a, 'b> {
-    ser: &'a mut Serializer<'b>,
-}
-
-impl<'a, 'b> StringCollector<'a, 'b> {
-    pub fn new(ser: &'a mut Serializer<'b>) -> Self {
-        Self { ser }
-    }
-
-    fn do_write_str(&mut self, s: &str) -> Result<()> {
-        for c in s.chars() {
-            self.ser.push_char(c)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl fmt::Write for StringCollector<'_, '_> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.do_write_str(s).or(Err(fmt::Error))
     }
 }
 
 /// Serializes the given data structure as a string of JSON text
 #[cfg(feature = "heapless")]
-pub fn to_string<T, const N: usize>(value: &T) -> Result<String<N>>
+pub fn to_string<T, const N: usize>(value: &T) -> Result<String<N>, Error<SliceWriteError>>
 where
     T: ser::Serialize + ?Sized,
 {
@@ -675,50 +622,26 @@ where
 
 /// Serializes the given data structure as a JSON byte vector
 #[cfg(feature = "heapless")]
-pub fn to_vec<T, const N: usize>(value: &T) -> Result<Vec<u8, N>>
+pub fn to_vec<T, const N: usize>(value: &T) -> Result<Vec<u8, N>, Error<SliceWriteError>>
 where
     T: ser::Serialize + ?Sized,
 {
     let mut buf = Vec::<u8, N>::new();
-    buf.resize_default(N)?;
+    buf.resize_default(N).map_err(|_| SliceWriteError::Full)?;
     let len = to_slice(value, &mut buf)?;
     buf.truncate(len);
     Ok(buf)
 }
 
 /// Serializes the given data structure as a JSON byte vector into the provided buffer
-pub fn to_slice<T>(value: &T, buf: &mut [u8]) -> Result<usize>
+pub fn to_slice<T>(value: &T, buf: &mut [u8]) -> Result<usize, Error<SliceWriteError>>
 where
     T: ser::Serialize + ?Sized,
 {
-    let mut ser = Serializer::new(buf);
+    let mut ser = Serializer::new(&mut *buf);
     value.serialize(&mut ser)?;
-    Ok(ser.current_length)
-}
-
-impl ser::Error for Error {
-    fn custom<T>(_msg: T) -> Self
-    where
-        T: fmt::Display,
-    {
-        unreachable!()
-    }
-}
-
-/// An unreachable type to fill the SerializeTupleVariant type
-pub enum Unreachable {}
-
-impl ser::SerializeTupleVariant for Unreachable {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_field<T: ?Sized>(&mut self, _value: &T) -> Result<()> {
-        unreachable!()
-    }
-
-    fn end(self) -> Result<Self::Ok> {
-        unreachable!()
-    }
+    let rem = ser.into_inner().len();
+    Ok(buf.len() - rem)
 }
 
 #[cfg(test)]

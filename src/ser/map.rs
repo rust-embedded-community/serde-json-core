@@ -1,28 +1,31 @@
+use core::fmt::Display;
+
+use embedded_io::Write;
 use serde::ser;
 
-use crate::ser::{Error, Result, Serializer};
+use crate::ser::{Error, Serializer};
 
-pub struct SerializeMap<'a, 'b> {
-    ser: &'a mut Serializer<'b>,
+pub struct SerializeMap<'a, W> {
+    ser: &'a mut Serializer<W>,
     first: bool,
 }
 
-impl<'a, 'b: 'a> SerializeMap<'a, 'b> {
-    pub(crate) fn new(ser: &'a mut Serializer<'b>) -> Self {
+impl<'a, W> SerializeMap<'a, W> {
+    pub(crate) fn new(ser: &'a mut Serializer<W>) -> Self {
         SerializeMap { ser, first: true }
     }
 }
 
-impl<'a, 'b: 'a> ser::SerializeMap for SerializeMap<'a, 'b> {
+impl<'a, W: Write<Error: Display>> ser::SerializeMap for SerializeMap<'a, W> {
     type Ok = ();
-    type Error = Error;
+    type Error = Error<W::Error>;
 
-    fn end(self) -> Result<Self::Ok> {
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         self.ser.push(b'}')?;
         Ok(())
     }
 
-    fn serialize_key<T>(&mut self, key: &T) -> Result<()>
+    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -35,7 +38,7 @@ impl<'a, 'b: 'a> ser::SerializeMap for SerializeMap<'a, 'b> {
         Ok(())
     }
 
-    fn serialize_value<T>(&mut self, value: &T) -> Result<()>
+    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: ser::Serialize + ?Sized,
     {
